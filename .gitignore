@@ -1,0 +1,20 @@
+# 가상환경 (용량 크고 재설치 가능 — requirements.txt로 복원)
+venv/
+__pycache__/
+*.pyc
+
+# 비밀키 (절대 커밋 금지)
+.env
+
+# RAG 벡터DB (재생성 가능 — rag/build_corpus.py로 복원)
+rag/chroma_db/
+
+# 테스트/디버그용 잔여 DB
+fact_store/test2.db
+fact_store/test2.db-journal
+
+# 렌더링 테스트로 생성된 임시 DOCX (최종 산출물이 아니라 검증용)
+outputs/*.docx
+
+# OS
+.DS_Store
