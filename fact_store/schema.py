@@ -111,6 +111,14 @@ class Competitor(BaseModel):
 
     name: str
     type: CompetitorType
+    topic: Optional[str] = Field(
+        default=None,
+        description=(
+            "이 경쟁사가 어떤 연구대상(topic) 실행에서 나왔는지. Fact.topic과 동일한 목적 — "
+            "여러 프로젝트를 반복 실행해도 서로 다른 topic의 동명 경쟁사가 덮어써지지 않도록 "
+            "fact_store.store의 기본키(topic, name) 복합키로 쓰인다."
+        ),
+    )
     price: Optional[str] = None
     key_features: list[str] = Field(default_factory=list)
     target_customer: Optional[str] = None
@@ -124,6 +132,10 @@ class Competitor(BaseModel):
 class MarketSizing(BaseModel):
     """시장조사 에이전트의 TAM/SAM/SOM 계산 결과"""
 
+    topic: Optional[str] = Field(
+        default=None,
+        description="이 시장규모 계산이 어떤 연구대상(topic)에 대한 것인지 — latest_market_sizing(topic=...) 필터링에 쓰인다.",
+    )
     tam_topdown: Optional[float] = None
     sam_topdown: Optional[float] = None
     som_topdown: Optional[float] = None

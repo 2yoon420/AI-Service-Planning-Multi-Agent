@@ -163,8 +163,22 @@ PROFILE_SCHEMA = {
                             "key_features": {"type": "array", "items": {"type": "string"}},
                             "target_customer": {"type": "string", "description": "근거 fact에 없으면 빈 문자열."},
                             "channel": {"type": "string", "description": "근거 fact에 없으면 빈 문자열."},
-                            "funding_or_revenue": {"type": "string", "description": "근거 fact에 없으면 빈 문자열."},
-                            "strengths": {"type": "array", "items": {"type": "string"}},
+                            "funding_or_revenue": {
+                                "type": "string",
+                                "description": (
+                                    "투자 유치·인수(피인수 포함)·매출액·기업가치 등 '돈과 직접 관련된 사실'. "
+                                    "예: '2016년 Mars Petcare에 $117M에 인수됨', '시리즈B $20M 투자 유치', "
+                                    "'연매출 500만 달러'. 이런 내용이 fact에 있으면 strengths가 아니라 "
+                                    "반드시 이 필드에 넣을 것 — 피인수 사실이 '시장에서 인정받았다'는 "
+                                    "의미로도 읽히더라도, 금액이 언급된 재무 사실 자체는 이 필드가 우선이다. "
+                                    "근거 fact에 없으면 빈 문자열."
+                                ),
+                            },
+                            "strengths": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "기능·기술·시장 포지셔닝 등 정성적 장점만. 투자·인수·매출 등 금액이 있는 사실은 여기 말고 funding_or_revenue에 넣을 것.",
+                            },
                             "weaknesses": {"type": "array", "items": {"type": "string"}},
                             "source_fact_ids": {
                                 "type": "array",
@@ -598,6 +612,16 @@ def build_competitor_profiles(client: OpenAI, facts: list[Fact], candidates: lis
 각 경쟁사마다 비교 프로필(가격, 핵심기능, 타깃고객, 채널, 투자·매출 규모, 강점, 약점)을
 작성하세요.
 
+필드 구분 기준(중요 — 2026-07-24 추가, 실제 산출물에서 재무 정보가 strengths로 잘못
+분류된 사례 발견):
+- 투자 유치, 인수(피인수 포함), 매출액, 기업가치처럼 "금액이 언급된 재무 사실"은
+  strengths가 아니라 반드시 funding_or_revenue 필드에 넣으세요. 예: "2016년 Mars
+  Petcare에 $117M에 인수됨"은 강점이 아니라 funding_or_revenue에 들어가야 합니다 —
+  피인수 사실이 시장에서의 인지도를 보여주는 지표로도 읽히지만, 금액이 있는 재무
+  사실은 재무 필드가 우선입니다.
+- strengths/weaknesses에는 기능·기술·시장 포지셔닝처럼 금액이 없는 정성적 장단점만
+  담으세요.
+
 매우 중요 — 출처 조작 금지:
 - 반드시 해당 경쟁사 아래 나열된 fact 내용만 근거로 쓰세요.
 - fact에 없는 정보(예: 가격, 투자 규모)는 절대 지어내지 말고, 해당 필드를 빈 문자열
@@ -910,13 +934,10 @@ def run_competitor_analysis(
     print(f"[경쟁사비교 에이전트] 연구대상: {topic} / 목표시장: {target_market}")
 
     # 검색 질문을 짜기 전에, 시장조사 단계 등에서 이미 모아둔 관련 fact가 있는지 먼저
-    # 확인한다(2026-07-23 변경, 파이프라인 문서 30절). 아래(926행 부근)의 historical_facts
-    # 판정과 같은 topic 일치 로직을 그대로 재사용 — SQLite 로컬 조회라 두 번 호출해도
-    # 비용이 크지 않다.
-    existing_topic_facts = [
-        f for f in list_facts()
-        if (f.topic == topic if f.topic is not None else topic in (f.topic_relevance or ""))
-    ]
+    # 확인한다(2026-07-23 변경, 파이프라인 문서 30절). topic 일치 판정 로직은 2026-07-24부터
+    # fact_store.list_facts()의 topic 파라미터로 통합했다(중복 제거 — 이전엔 여기와 아래
+    # historical_facts 두 곳에 같은 필터가 따로 있었음).
+    existing_topic_facts = list_facts(topic=topic)
     queries = generate_competitor_queries(
         client, topic, target_market, n=n_queries, existing_facts=existing_topic_facts
     )
@@ -942,23 +963,11 @@ def run_competitor_analysis(
     print(f"\n[경쟁사비교 에이전트] fact {counters['n_saved']}개 신규 저장, 중복 {counters['n_duplicates']}개 건너뜀")
 
     # 이번 실행에서 다룬 fact(run_facts)는 검색 질문(topic_relevance) 문구와 무관하게 항상 포함한다.
-    # 과거 fact는 이제 topic 필드(정확히 일치)를 우선 사용하고, topic 필드가 없는 레거시 fact만
-    # 예전 방식(topic_relevance 부분 문자열 매칭)으로 보조 판정한다.
-    # (버그 이력: LLM이 생성한 검색 질문이 topic 문구를 그대로 포함하지 않는 경우 — 예:
-    #  topic="웨어러블 헬스케어 기기"인데 질문은 "애플 워치, 갤럭시 워치, 핏빗 시니어 건강관리
-    #  기능별 가격 비교"처럼 재구성되면 — 이전에는 substring 필터에서 통째로 빠졌음. topic
-    #  필드 도입으로 신규 fact는 이 문제에서 벗어났으나, 필드 도입 이전에 저장된 레거시 fact는
-    #  여전히 substring 매칭에 의존하므로 완전히 해결된 것은 아님.)
+    # 과거 fact는 fact_store.list_facts(topic=topic)에 판정을 위임한다(topic 필드가 있으면
+    # 정확히 일치하는 것만, 없는 레거시 fact는 topic_relevance 부분 문자열 매칭으로 보조 판정 —
+    # 로직 자체는 그대로이고 2026-07-24에 중복 제거만 함).
     run_fact_ids = {f.id for f in run_facts}
-    historical_facts = [
-        f for f in list_facts()
-        if f.id not in run_fact_ids
-        and (
-            f.topic == topic
-            if f.topic is not None
-            else topic in (f.topic_relevance or "")
-        )
-    ]
+    historical_facts = [f for f in list_facts(topic=topic) if f.id not in run_fact_ids]
     all_facts = run_facts + historical_facts
     print(f"[경쟁사비교 에이전트] 대상 fact {len(all_facts)}개 로드 완료 "
           f"(이번 실행 {len(run_facts)}개 + 과거 fact 중 topic 일치 {len(historical_facts)}개)")
@@ -1005,6 +1014,7 @@ def run_competitor_analysis(
     for p in profiles:
         competitor = Competitor(
             name=p["name"],
+            topic=topic,
             type=CompetitorType(type_by_name.get(p["name"], CompetitorType.DIRECT.value)),
             price=p["price"] or None,
             key_features=p["key_features"],

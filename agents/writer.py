@@ -321,11 +321,30 @@ def _slugify(text: str) -> str:
     return re.sub(r"[^\w가-힣_-]", "", text)
 
 
-def _versioned_base_name(output_dir: Path, base_name: str) -> str:
+def _versioned_base_name(
+    output_dir: Path, base_name: str, revision_note: Optional[str] = None
+) -> str:
     """같은 topic/target_market으로 재실행하면 파일명이 그대로라 저장할 때마다
-    덮어써지는 문제가 있었다(2026-07-23 사용자 지적). .md/.docx 둘 중 하나라도 이미
-    있으면 base_name_v2, _v3 ... 형태로 다음 버전 번호를 찾아 매번 새 파일로 남긴다.
-    첫 실행은 기존과 동일하게 버전 접미사 없이 저장된다(하위 호환)."""
+    덮어써지는 문제가 있었다(2026-07-23 사용자 지적). 처음엔 'base_name_v2, _v3 ...
+    다음 번호 찾기'로만 막았는데, 2026-07-24 Task #5에서 revision_note(문서 표지에
+    쓰는 "N차 수정본" 표시)가 생기면서 파일명도 같은 문구를 쓰도록 바꿨다 — 문서를
+    열어보지 않아도 파일명만으로 몇 차 수정본인지 바로 알 수 있어야 한다는 사용자
+    지적을 반영함(2026-07-24).
+
+    revision_note가 있으면(재작업 결과) 그 문구를 슬러그로 붙인 이름을 쓰고, 없으면
+    (최초 초안) 기존처럼 접미사 없는 이름을 그대로 쓴다. 두 경우 모두 혹시라도 같은
+    이름의 파일이 이미 있으면(예: 같은 topic/시장으로 완전히 새 세션을 다시 시작해
+    revision_count가 다시 0부터 도는 경우) 그때만 번호를 하나 더 붙이는 안전장치를
+    유지한다 — 평소엔 안 보이고, 이름이 겹칠 때만 작동한다."""
+    if revision_note:
+        slug = _slugify(revision_note)
+        candidate = f"{base_name}_{slug}"
+        collision_suffix = 2
+        while (output_dir / f"{candidate}.md").exists() or (output_dir / f"{candidate}.docx").exists():
+            candidate = f"{base_name}_{slug}_{collision_suffix}"
+            collision_suffix += 1
+        return candidate
+
     candidate = base_name
     version = 1
     while (output_dir / f"{candidate}.md").exists() or (output_dir / f"{candidate}.docx").exists():
@@ -341,20 +360,25 @@ def run_writer(
     pestel_summaries: Optional[list[dict]] = None,
     competitors: Optional[list[Competitor]] = None,
     save: bool = True,
+    revision_note: Optional[str] = None,
 ) -> str:
     """기획서 초안(마크다운 문자열)을 조립해 반환한다.
 
     market_sizing/pestel_summaries/competitors를 이미 가지고 있으면(Orchestrator가
     같은 실행 안에서 넘겨주는 경우) 그대로 받아 재계산을 피하고, 없으면(단독 CLI 실행)
     Fact Store에서 다시 조회/재계산한다. PESTEL은 새 웹검색 없이 이미 저장된 fact를
-    다시 태깅하는 것뿐이라 재실행 비용이 크지 않다."""
+    다시 태깅하는 것뿐이라 재실행 비용이 크지 않다.
+
+    revision_note(예: "1차 수정본")를 주면 문서 헤더와 저장 파일명 양쪽에 반영된다
+    (Task #5, 2026-07-24) — orchestrator.graph의 writer_node가 revision_count를 보고
+    자동으로 채워서 넘긴다. None이면(최초 초안) 기존과 완전히 동일하게 동작한다."""
     init_db()
     client = get_client()
 
     if market_sizing is None:
-        market_sizing = latest_market_sizing()
+        market_sizing = latest_market_sizing(topic=topic)
     if competitors is None:
-        competitors = list_competitors()
+        competitors = list_competitors(topic=topic)
     if pestel_summaries is None:
         pestel_summaries = run_pestel_analysis(topic, target_market)
 
@@ -378,11 +402,13 @@ def run_writer(
     source_fact_ids = _collect_source_fact_ids(market_sizing, pestel_summaries, competitors)
     source_appendix_md = _format_source_appendix_md(source_fact_ids)
 
+    revision_line = f"\n- 수정 차수: {revision_note}" if revision_note else ""
+
     doc = f"""# {topic} 사업 기획서 (초안)
 
 - 목표시장: {target_market}
 - 작성일: {date.today().isoformat()}
-- 작성: AI 서비스 기획 보조 Multi-Agent (자동 생성 초안 — 사람 검수 필요)
+- 작성: AI 서비스 기획 보조 Multi-Agent (자동 생성 초안 — 사람 검수 필요){revision_line}
 
 ## 1. 개요
 
@@ -416,7 +442,7 @@ def run_writer(
     if save:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         base_name = f"{_slugify(topic)}_{_slugify(target_market)}_기획서초안"
-        base_name = _versioned_base_name(OUTPUT_DIR, base_name)
+        base_name = _versioned_base_name(OUTPUT_DIR, base_name, revision_note=revision_note)
 
         docx_path = export_to_docx(
             topic=topic,
@@ -430,6 +456,7 @@ def run_writer(
             synthesis=synthesis_md,
             source_fact_ids=source_fact_ids,
             output_path=OUTPUT_DIR / f"{base_name}.docx",
+            revision_note=revision_note,
         )
         print(f"[Writer 에이전트] 저장 완료(docx, 제출용): {docx_path}")
 

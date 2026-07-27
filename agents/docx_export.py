@@ -383,7 +383,13 @@ def _add_warn_box(doc: Document, text: str) -> None:
 # ---------------------------------------------------------------------------
 # 2. 표지 — 뒤이어 페이지 나눔 없이 01 개요로 바로 이어진다 (참고 docx 실측)
 # ---------------------------------------------------------------------------
-def _add_cover(doc: Document, topic: str, target_market: str, created_date: str) -> None:
+def _add_cover(
+    doc: Document,
+    topic: str,
+    target_market: str,
+    created_date: str,
+    revision_note: Optional[str] = None,
+) -> None:
     label = doc.add_paragraph()
     _add_run(label, "사업 기획서 초안  |  DRAFT", size=Pt(9), bold=True, color=COLOR_ACCENT)
 
@@ -400,6 +406,11 @@ def _add_cover(doc: Document, topic: str, target_market: str, created_date: str)
         ("작성일", created_date),
         ("작성", "AI 서비스 기획 보조 Multi-Agent — 자동 생성 초안, 사람 검수 필요"),
     ]
+    # 2026-07-24 추가(Task #5): revision_note가 있으면(재작업 결과물) 표지 표에
+    # "수정 차수" 행을 하나 더 추가한다. 아래 렌더링 루프는 info_rows 길이에 맞춰
+    # 동적으로 표를 그리므로 이 리스트에 추가하는 것 외엔 다른 수정이 필요 없다.
+    if revision_note:
+        info_rows.append(("수정 차수", revision_note))
     # 2200:7106 twip = 라벨 24% : 값 76% (A4 기준). 격자 스타일을 절대 쓰지 않고
     # (table.style=None) 좌우 테두리는 nil로 지워, 위/아래 얇은 회색선만 남긴다.
     # tblGrid/tblW를 명시적으로 지정해야 렌더러가 좁은 라벨 열(24%)을 실제로 지킨다.
@@ -752,13 +763,18 @@ def export_to_docx(
     synthesis: str,
     source_fact_ids: list[str],
     output_path: Path,
+    revision_note: Optional[str] = None,
 ) -> Path:
-    """구조화된 Writer 산출물을 A4 Word 문서로 저장하고 저장 경로를 반환한다."""
+    """구조화된 Writer 산출물을 A4 Word 문서로 저장하고 저장 경로를 반환한다.
+
+    revision_note(예: "1차 수정본")가 있으면 표지 정보 표에 "수정 차수" 행을 추가한다
+    (Task #5, 2026-07-24 — 사용자가 여러 차례 되돌아와 수정할 걸 감안해 몇 차 수정본인지
+    문서 자체에 남김)."""
     doc = Document()
     _set_a4(doc)
     _add_footer(doc, f"{topic} — {target_market} 기획서 초안")
 
-    _add_cover(doc, topic, target_market, created_date)
+    _add_cover(doc, topic, target_market, created_date, revision_note=revision_note)
 
     # 01 개요
     _add_h1(doc, 1, "개요 (Executive Summary)")

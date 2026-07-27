@@ -263,6 +263,7 @@ def calculate_market_sizing(
             )
 
     sizing = MarketSizing(
+        topic=topic,
         tam_topdown=tam_topdown,
         sam_topdown=sam_topdown,
         som_topdown=som_topdown,
@@ -476,6 +477,47 @@ def _search_extract_and_save(
         verify_facts_batch(client, newly_saved_with_content, topic, target_market)
 
     return n_facts_this_query
+
+
+def run_targeted_research(
+    topic: str,
+    target_market: str,
+    focus_query: str,
+    results_per_question: int = 6,
+    client: OpenAI | None = None,
+) -> list[Fact]:
+    """Router가 '투자/매출 정보 더 찾아줘'처럼 특정 항목을 콕 집어 재검색을 요청했을 때
+    호출하는, 좁은 범위의 검색 함수(2026-07-24 추가, Router 설계안 3-4절).
+
+    run_market_research()처럼 리서치 질문 여러 개를 새로 생성하지 않고, 주어진
+    focus_query 하나만 검색해 Fact Store에 추가한다. 이미 있던 _search_extract_and_save()
+    (검색 -> 청크 필터링 -> fact 추출 -> 저장 -> 배치 검증까지 수행)를 그대로 재사용하므로
+    새로 만든 로직이 아니라 기존 검증된 흐름을 노출만 한 것이다.
+
+    TAM/SAM/SOM 재계산은 여기서 하지 않는다 — 시장 규모를 다시 계산해야 하면 호출부가
+    별도로 calculate_market_sizing()을 다시 부르면 된다(이 함수는 fact 보강만 책임진다).
+    """
+    init_db()
+    if client is None:
+        client = get_client()
+
+    all_facts: list[Fact] = []
+    counters = {"n_saved": 0, "n_duplicates": 0}
+    print(f"[시장조사 에이전트-타겟검색] '{focus_query}' 검색 중...")
+    n_found = _search_extract_and_save(
+        client, focus_query, topic, target_market, results_per_question, all_facts, counters
+    )
+
+    if n_found == 0:
+        retry_query = simplify_query(client, focus_query)
+        print(f"  [재시도] 이 질의에서 fact를 못 찾음 → 더 일반적인 검색어로 재검색: {retry_query}")
+        _search_extract_and_save(
+            client, retry_query, topic, target_market, results_per_question, all_facts, counters
+        )
+
+    print(f"[시장조사 에이전트-타겟검색] fact {counters['n_saved']}개 신규 저장, "
+          f"중복 {counters['n_duplicates']}개 건너뜀 (관련 fact 총 {len(all_facts)}개)")
+    return all_facts
 
 
 def run_market_research(

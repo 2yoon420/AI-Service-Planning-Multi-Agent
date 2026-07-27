@@ -6,6 +6,10 @@ anthropic>=0.40.0
 langgraph>=0.2.0
 langchain-core>=0.3.0
 
+# Router+interrupt() 체크포인터 (2026-07-24 추가) — orchestrator/graph.py의
+# SqliteSaver.from_conn_string()에 필요. langgraph 본체에는 포함되어 있지 않음.
+langgraph-checkpoint-sqlite>=2.0.0
+
 # 환경설정 및 데이터 모델
 python-dotenv>=1.0.0
 pydantic>=2.0.0

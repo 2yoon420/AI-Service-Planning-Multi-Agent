@@ -13,6 +13,11 @@ rag/chroma_db/
 fact_store/test2.db
 fact_store/test2.db-journal
 
+# LangGraph 체크포인트 DB (대화 상태 저장소 — fact_store.db와 달리 사람이 볼 만한
+# 데이터가 아니라 그래프 실행 상태 스냅샷이라 rag/chroma_db와 같은 원칙으로 커밋하지 않음.
+# 2026-07-24 Router+interrupt() 확장에서 추가)
+orchestrator/checkpoints.db
+
 # 렌더링 테스트로 생성된 임시 DOCX (최종 산출물이 아니라 검증용)
 outputs/*.docx
 

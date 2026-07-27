@@ -42,6 +42,20 @@ SOURCE_DOCS = {
     "NCS": PROJECT_ROOT / "NCS",
 }
 
+# 2026-07-24 추가(Router 설계안 3-6절): "이 서비스가 뭘 할 수 있어요?" 같은 메타 질문에
+# 즉답하기 위한 코퍼스. TTA/NCS와 달리 PDF가 아니라 사람이 직접 쓴 마크다운이라
+# Document Parse(OCR) 단계 없이 바로 청크·임베딩한다.
+#
+# 2026-07-24 추가 수정: 처음엔 tta_ncs_corpus 컬렉션에 doc_type="CAPABILITY"로 같이
+# 넣고 검색 시 where 필터로 구분했는데, 실측(전체 1264개 중 CAPABILITY 3개) 결과
+# 근사 최근접 검색(HNSW)이 필터를 통과하는 소수 문서를 놓치는 문제가 재현되어
+# (/tmp 재현 테스트: 군집형 데이터에서 필터 적용 시 3개 중 2개만 반환), 아예 별도
+# 컬렉션으로 분리한다. 컬렉션 안에 CAPABILITY 문서만 있으면 사실상 전수비교가 되어
+# 이 문제 자체가 발생하지 않는다.
+CAPABILITY_DOC_TYPE = "CAPABILITY"
+CAPABILITY_CORPUS_PATH = Path(__file__).parent / "capability_corpus.md"
+CAPABILITY_COLLECTION_NAME = "capability_corpus"
+
 
 def get_upstage_client() -> OpenAI:
     api_key = os.getenv("UPSTAGE_API_KEY")
@@ -119,6 +133,36 @@ def build_corpus(doc_type: str, folder: Path, client: OpenAI, collection) -> int
     return total_chunks
 
 
+def build_capability_corpus(client: OpenAI, chroma_client) -> int:
+    """capability_corpus.md(사람이 직접 쓴 마크다운)를 청크·임베딩해 tta_ncs_corpus와는
+    별도인 전용 컬렉션(capability_corpus)에 적재한다. TTA/NCS와 달리 이미 마크다운이라
+    parse_pdf_to_markdown()(Document Parse, 페이지당 과금)을 거치지 않는다 — 비용이 들지
+    않는다.
+
+    tta_ncs_corpus를 공유하지 않고 별도 컬렉션을 쓰는 이유는 파일 상단 주석 참고
+    (HNSW 근사 검색이 대규모 컬렉션 속 극소수 문서를 놓치는 문제 재현됨)."""
+    if not CAPABILITY_CORPUS_PATH.exists():
+        print(f"경고: {CAPABILITY_CORPUS_PATH}가 없습니다. 건너뜁니다.")
+        return 0
+
+    print(f"[{CAPABILITY_DOC_TYPE}] 처리 중: {CAPABILITY_CORPUS_PATH.name}")
+    markdown = CAPABILITY_CORPUS_PATH.read_text(encoding="utf-8")
+    chunks = chunk_text(markdown)
+    if not chunks:
+        return 0
+
+    embeddings = embed_passages(client, chunks)
+    collection = chroma_client.get_or_create_collection(CAPABILITY_COLLECTION_NAME)
+    ids = [f"{CAPABILITY_DOC_TYPE}_{CAPABILITY_CORPUS_PATH.stem}_{i}" for i in range(len(chunks))]
+    metadatas = [
+        {"doc_type": CAPABILITY_DOC_TYPE, "source_file": CAPABILITY_CORPUS_PATH.name, "chunk_index": i}
+        for i in range(len(chunks))
+    ]
+    collection.upsert(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
+    print(f"  -> {len(chunks)}개 청크 저장 (전용 컬렉션 '{CAPABILITY_COLLECTION_NAME}')")
+    return len(chunks)
+
+
 def main(only: str = None, reset: bool = False):
     """
     only: 'TTA' 또는 'NCS'만 처리하고 싶을 때 지정 (테스트용)
@@ -129,11 +173,12 @@ def main(only: str = None, reset: bool = False):
     client = get_upstage_client()
     chroma_client = chromadb.PersistentClient(path=str(CHROMA_DIR))
     if reset:
-        try:
-            chroma_client.delete_collection(COLLECTION_NAME)
-            print(f"기존 컬렉션 '{COLLECTION_NAME}' 삭제 완료 — 새로 적재합니다.")
-        except Exception:
-            pass  # 컬렉션이 원래 없었으면 무시
+        for name in (COLLECTION_NAME, CAPABILITY_COLLECTION_NAME):
+            try:
+                chroma_client.delete_collection(name)
+                print(f"기존 컬렉션 '{name}' 삭제 완료 — 새로 적재합니다.")
+            except Exception:
+                pass  # 컬렉션이 원래 없었으면 무시
     collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
 
     total = 0
@@ -145,8 +190,11 @@ def main(only: str = None, reset: bool = False):
             continue
         total += build_corpus(doc_type, folder, client, collection)
 
-    print(f"\n총 {total}개 청크가 '{COLLECTION_NAME}' 컬렉션에 저장되었습니다.")
-    print(f"저장 위치: {CHROMA_DIR}")
+    if only in (None, CAPABILITY_DOC_TYPE):
+        total += build_capability_corpus(client, chroma_client)
+
+    print(f"\n총 {total}개 청크가 처리되었습니다.")
+    print(f"저장 위치: {CHROMA_DIR} (TTA/NCS -> '{COLLECTION_NAME}', CAPABILITY -> '{CAPABILITY_COLLECTION_NAME}')")
 
 
 if __name__ == "__main__":

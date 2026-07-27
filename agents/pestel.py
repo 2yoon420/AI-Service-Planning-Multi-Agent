@@ -307,16 +307,10 @@ def run_pestel_analysis(topic: str, target_market: str) -> list[dict]:
     init_db()
     client = get_client()
 
-    # topic 필드(정확히 일치)를 우선 사용하고, topic 필드가 없는 레거시 fact만
-    # topic_relevance(리서치 질문 문구) 부분 문자열 매칭으로 보조 판정한다.
-    # (여러 주제로 시장조사를 반복 실행했을 경우 서로 섞이지 않도록 하는 목적은 동일하나,
-    # 검색 질문이 topic 문구를 그대로 포함하지 않게 재구성되는 경우 substring 매칭만으로는
-    # fact를 놓칠 수 있음 — agents/competitor.py 11-3절에서 실제로 발견된 문제와 동일한 유형)
-    all_facts = list_facts()
-    facts = [
-        f for f in all_facts
-        if (f.topic == topic if f.topic is not None else topic in (f.topic_relevance or ""))
-    ]
+    # topic 일치 판정은 fact_store.list_facts(topic=topic)에 위임한다(topic 필드가 있으면
+    # 정확히 일치하는 것만, 없는 레거시 fact는 topic_relevance 부분 문자열 매칭으로 보조 판정 —
+    # 2026-07-24부터 agents/competitor.py와 중복이던 이 로직을 한 곳으로 통합함).
+    facts = list_facts(topic=topic)
     if not facts:
         print(f"[PESTEL 에이전트] 경고: '{topic}' 관련 fact가 Fact Store에 없습니다. 시장조사 에이전트를 먼저 실행하세요.")
         return []
