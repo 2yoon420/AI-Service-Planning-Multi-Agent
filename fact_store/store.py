@@ -19,11 +19,15 @@ import json
 import sqlite3
 from difflib import SequenceMatcher
 from pathlib import Path
+
+from paths import data_path
 from typing import Optional
 
 from fact_store.schema import Competitor, Fact, MarketSizing
 
-DB_PATH = Path(__file__).parent / "fact_store.db"
+# 배포 시 DATA_DIR로 소스 트리 밖(영구 디스크)으로 뺀다 — 이 파일은 git에 추적되고
+# 있어서, 그대로 두면 서버에서 git pull 할 때마다 수집한 fact가 덮인다(paths.py 참고).
+DB_PATH = data_path("fact_store.db", Path(__file__).parent / "fact_store.db")
 
 
 def _connect() -> sqlite3.Connection:
@@ -233,7 +237,11 @@ def list_facts(
 DUPLICATE_SIMILARITY_THRESHOLD = 0.85
 
 
-def find_similar_fact(text: str, threshold: float = DUPLICATE_SIMILARITY_THRESHOLD) -> Optional[Fact]:
+def find_similar_fact(
+    text: str,
+    threshold: float = DUPLICATE_SIMILARITY_THRESHOLD,
+    topic: Optional[str] = None,
+) -> Optional[Fact]:
     """
     기존 fact 중 텍스트가 threshold 이상 유사한 것이 있으면 반환한다 (없으면 None).
 
@@ -241,8 +249,36 @@ def find_similar_fact(text: str, threshold: float = DUPLICATE_SIMILARITY_THRESHO
     "84억 4천만 달러이다" vs "84억 4천만 달러입니다"처럼 표현만 다른 사실상 동일한
     fact를 잡아내는 게 목적이라, 이 정도 근사치로 충분하다고 판단함. 완전히 다른
     표현으로 같은 내용을 말하는 경우(의역)까지는 못 잡는다는 한계가 있다.
+
+    2026-07-28 수정 — topic 스코핑 (프로젝트 간 근거 유실 버그):
+    이 함수는 원래 list_facts()를 필터 없이 호출해 **전체 프로젝트**를 훑었다. 그래서
+    서로 다른 주제의 두 프로젝트가 우연히 같은 문장을 만나면, 나중 프로젝트가 "중복"으로
+    판정되어 저장을 건너뛰었다. 그 fact는 앞 프로젝트의 topic을 달고 있으므로
+    list_facts(topic=나중프로젝트)로는 조회되지 않는다 — 즉 **저장도 조회도 안 되어
+    기획서에서 근거가 통째로 사라졌다.** 재현 결과:
+
+        프로젝트A 저장: is_new=True,  topic='웨어러블 헬스케어 기기'
+        프로젝트B 저장: is_new=False, topic='웨어러블 헬스케어 기기'   ← B의 topic이 아님
+        → 프로젝트B로 조회한 fact 수: 0건
+
+    topic을 넘기면 그 topic의 fact와 **레거시 fact(topic이 비어 있는 것)** 만 후보로 본다.
+    레거시를 포함시키는 이유는 save_fact_if_new()의 점진적 백필이 바로 그 대상을 노리기
+    때문이다 — 여기서 제외하면 백필이 영영 동작하지 않는다.
+
+    topic=None이면 종전대로 전체를 훑는다(호출부 하위 호환).
     """
-    for existing in list_facts():
+    if topic is None:
+        candidates = list_facts()
+    else:
+        candidates = list_facts(topic=topic)
+        seen = {f.id for f in candidates}
+        # 레거시 fact — topic 필드 도입 이전 저장분. list_facts(topic=...)의
+        # topic_relevance 부분 문자열 폴백에 안 걸린 것들을 여기서 보충한다.
+        candidates += [
+            f for f in list_facts() if f.topic is None and f.id not in seen
+        ]
+
+    for existing in candidates:
         ratio = SequenceMatcher(None, text, existing.text).ratio()
         if ratio >= threshold:
             return existing
@@ -260,7 +296,10 @@ def save_fact_if_new(fact: Fact, threshold: float = DUPLICATE_SIMILARITY_THRESHO
     필터에 걸리지 않고 소외되는 문제를 점진적으로 완화하기 위함. 완전한 백필은 아니고,
     같은 내용의 fact가 topic이 지정된 채로 다시 발견될 때만 보정됨.)
     """
-    duplicate = find_similar_fact(fact.text, threshold=threshold)
+    # topic을 넘겨 같은 프로젝트(+레거시) 안에서만 중복을 찾는다.
+    # 넘기지 않으면 다른 프로젝트의 fact를 중복으로 오판해 근거가 유실된다
+    # (find_similar_fact의 2026-07-28 주석 참고).
+    duplicate = find_similar_fact(fact.text, threshold=threshold, topic=fact.topic)
     if duplicate:
         if duplicate.topic is None and fact.topic is not None:
             duplicate.topic = fact.topic

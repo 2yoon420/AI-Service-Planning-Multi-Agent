@@ -8,13 +8,19 @@ RAG 코퍼스 검색
 import os
 from pathlib import Path
 
+from paths import data_path
+
 import chromadb
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
 
-CHROMA_DIR = Path(__file__).parent / "chroma_db"
+import logging
+
+log = logging.getLogger(__name__)
+
+CHROMA_DIR = data_path("chroma_db", Path(__file__).parent / "chroma_db")
 COLLECTION_NAME = "tta_ncs_corpus"
 
 # 2026-07-24 추가: capability_corpus 전용 컬렉션 이름. build_corpus.py의
@@ -87,7 +93,8 @@ def search_capability_corpus(query: str, k: int = 3) -> list[dict]:
 if __name__ == "__main__":
     import sys
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     q = sys.argv[1] if len(sys.argv) > 1 else "출처 메타데이터 스키마 설계 근거"
     for hit in search_corpus(q, k=3):
-        print(f"[{hit['doc_type']}] {hit['source_file']} (거리 {hit['distance']:.3f})")
-        print(f"  {hit['text'][:150]}...\n")
+        log.info(f"[{hit['doc_type']}] {hit['source_file']} (거리 {hit['distance']:.3f})")
+        log.info(f"  {hit['text'][:150]}...\n")

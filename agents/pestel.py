@@ -22,6 +22,10 @@ from openai import OpenAI
 from fact_store.schema import Fact, ImpactDirection, PestelAxis, Urgency, VerificationStatus
 from fact_store.store import init_db, list_facts, save_fact
 
+import logging
+
+log = logging.getLogger(__name__)
+
 load_dotenv()
 
 HEAVY_MODEL = os.getenv("HEAVY_MODEL", "solar-pro2")
@@ -189,7 +193,7 @@ fact 목록:
         for fact in batch:
             tag = tags_by_id.get(fact.id)
             if not tag:
-                print(f"  [경고] fact_id={fact.id} 태깅 결과 누락 — 원본 그대로 둠")
+                log.info(f"  [경고] fact_id={fact.id} 태깅 결과 누락 — 원본 그대로 둠")
                 updated.append(fact)
                 continue
             fact.pestel_axis = [PestelAxis(a) for a in tag["pestel_axis"]]
@@ -312,7 +316,7 @@ def run_pestel_analysis(topic: str, target_market: str) -> list[dict]:
     # 2026-07-24부터 agents/competitor.py와 중복이던 이 로직을 한 곳으로 통합함).
     facts = list_facts(topic=topic)
     if not facts:
-        print(f"[PESTEL 에이전트] 경고: '{topic}' 관련 fact가 Fact Store에 없습니다. 시장조사 에이전트를 먼저 실행하세요.")
+        log.info(f"[PESTEL 에이전트] 경고: '{topic}' 관련 fact가 Fact Store에 없습니다. 시장조사 에이전트를 먼저 실행하세요.")
         return []
 
     # 검증·출처 에이전트가 "기각"한 fact는 PESTEL 분석 근거에서 제외 (경쟁사비교 에이전트와
@@ -320,24 +324,24 @@ def run_pestel_analysis(topic: str, target_market: str) -> list[dict]:
     verified_facts = [f for f in facts if f.verification_status != VerificationStatus.REJECTED]
     n_rejected = len(facts) - len(verified_facts)
     if n_rejected:
-        print(f"[PESTEL 에이전트] 검증 에이전트가 기각한 fact {n_rejected}개를 분석 대상에서 제외")
+        log.info(f"[PESTEL 에이전트] 검증 에이전트가 기각한 fact {n_rejected}개를 분석 대상에서 제외")
     facts = verified_facts
 
-    print(f"[PESTEL 에이전트] 대상 fact {len(facts)}개 로드 완료")
-    print("[PESTEL 에이전트] 6축 태깅 중...")
+    log.info(f"[PESTEL 에이전트] 대상 fact {len(facts)}개 로드 완료")
+    log.info("[PESTEL 에이전트] 6축 태깅 중...")
     tagged = tag_facts(client, facts)
     for f in tagged:
         axis_str = ", ".join(a.value for a in (f.pestel_axis or []))
-        print(f"  [{axis_str}] ({f.impact_direction.value if f.impact_direction else '?'}/"
+        log.info(f"  [{axis_str}] ({f.impact_direction.value if f.impact_direction else '?'}/"
               f"{f.urgency.value if f.urgency else '?'}) {f.text}")
 
-    print("\n[PESTEL 에이전트] 축별 요약 생성 중...")
+    log.info("\n[PESTEL 에이전트] 축별 요약 생성 중...")
     summaries = summarize_by_axis(client, tagged)
     for s in summaries:
-        print(f"\n=== {s['axis']} ===")
-        print(s["narrative"])
+        log.info(f"\n=== {s['axis']} ===")
+        log.info(s["narrative"])
         if s["excluded_low_materiality_fact_ids"]:
-            print(f"  (중요도 낮아 제외된 fact: {s['excluded_low_materiality_fact_ids']})")
+            log.info(f"  (중요도 낮아 제외된 fact: {s['excluded_low_materiality_fact_ids']})")
 
     return summaries
 

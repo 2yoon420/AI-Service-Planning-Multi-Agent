@@ -19,12 +19,21 @@ from openai import OpenAI
 
 from rag.query import search_capability_corpus
 
+import logging
+
+log = logging.getLogger(__name__)
+
 LIGHT_MODEL = os.getenv("LIGHT_MODEL", "solar-mini")
 HEAVY_MODEL = os.getenv("HEAVY_MODEL", "solar-pro2")
 
 # await_review에서 사용자가 몇 번이나 되돌아와도 되는지의 상한(설계안 3-2절, 6절 — 임의로
 # 정한 값이라 실증 검증은 안 됨. 무한 재작업 루프를 막는 안전장치가 목적).
 REVISION_CAP = 5
+
+# capability_qa 호출 상한(외부 검토보고서 ⑥). CLI에서는 사람이 직접 타이핑하니
+# 무해했지만, API로 열면 같은 질문을 무한 반복해 LLM 비용을 태울 수 있다.
+# REVISION_CAP과 마찬가지로 실증 근거 없는 임의값이다.
+QA_CAP = 20
 
 ROUTER_DECISION_SCHEMA = {
     "type": "json_schema",
@@ -212,5 +221,6 @@ def answer_capability_question(question: str, client: OpenAI | None = None, k: i
 if __name__ == "__main__":
     import sys
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     q = sys.argv[1] if len(sys.argv) > 1 else "이 서비스는 무엇을 어디까지 할 수 있어요?"
-    print(answer_capability_question(q))
+    log.info(answer_capability_question(q))

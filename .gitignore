@@ -23,3 +23,29 @@ outputs/*.docx
 
 # OS
 .DS_Store
+
+# API 프로젝트 메타 저장소 (자동 생성, fastapi_설계도.md 10-7절)
+api/sessions.db
+
+# FUSE 마운트 잔여물 (샌드박스 작업 부산물)
+.fuse_hidden*
+
+# Fact Store DB (2026-07-28 추적 해제)
+# 배포 스크립트가 git reset --hard를 하므로, 추적 상태로 두면 배포할 때마다
+# 서버에서 수집한 fact가 저장소 버전으로 덮인다. 데이터는 DATA_DIR(운영) 또는
+# 로컬 파일(개발)로 관리한다 — paths.py 상단 주석 참고.
+fact_store/fact_store.db
+fact_store/fact_store.db.backup_*
+
+# 프론트엔드 빌드 산출물·의존성 (2026-07-28 추가)
+# node_modules는 95MB이고, deploy/deploy.sh가 서버에서 `npm ci`로 재설치한다.
+# dist도 서버에서 `npm run build`로 생성하므로 커밋하지 않는다.
+# 단 package-lock.json은 npm ci에 필수이므로 반드시 커밋한다.
+frontend/node_modules/
+frontend/dist/
+
+# Vite가 남기는 임시 설정 파일
+frontend/vite.config.ts.timestamp-*.mjs
+
+# pytest 캐시
+.pytest_cache/

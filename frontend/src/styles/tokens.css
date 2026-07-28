@@ -1,0 +1,89 @@
+/* docx_design.md 2절 팔레트를 웹 토큰으로 옮긴 것.
+   원본 hex는 하나도 바꾸지 않았고, 5-1절 접근성 검산 결과에 따라
+   "어디에 쓰는 색인지"만 역할 변수로 분리했다. */
+
+:root {
+  /* ── 원본 팔레트 (docx_design.md 2절) ── */
+  --c-primary:   #0F4C5C;  /* 딥 틸 */
+  --c-accent:    #1B8A8F;  /* 틸 */
+  --c-sub:       #5A6B73;  /* 그레이 블루 */
+  --c-body:      #222222;
+  --c-body-2:    #333333;
+  --c-white:     #FFFFFF;
+  --c-warn-text: #9A6B00;
+  --c-warn-bg:   #FBF6E9;
+  --c-tint:      #E9F4F4;  /* 연한 틸 배경 */
+  --c-surface:   #F5F8F8;  /* 지브라/카드 배경 */
+
+  /* ── 역할 변수 (컴포넌트는 이것만 쓴다) ── */
+  --text-strong:  var(--c-primary);   /*  9.51:1 — 작은 글씨도 안전 */
+  --text-body:    var(--c-body);      /* 15.91:1 */
+  --text-muted:   var(--c-sub);       /*  5.55:1 */
+  --text-on-dark: var(--c-white);
+  --deco:         var(--c-accent);    /*  4.13:1 — 17px 이상 / 테두리 / 배경 전용 */
+
+  --bg-app:       var(--c-white);
+  --bg-panel:     var(--c-surface);
+  --bg-label:     var(--c-tint);
+  --bg-band:      var(--c-accent);    /* PESTEL 밴드 헤더 */
+  --bg-th:        var(--c-primary);   /* 표 헤더 */
+
+  --border:       #DCE6E6;            /* docx의 0.5pt auto 테두리에 대응하는 웹 값 */
+  --border-strong: var(--c-accent);
+
+  /* ── 출처 등급 배지 (4-3절) ── */
+  --tier-1-bg: var(--c-primary);
+  --tier-2-bg: var(--c-accent);
+  --tier-3-bg: var(--c-sub);
+
+  /* ── 상태 색 (팔레트 안에서만 조달) ── */
+  --st-running:  var(--c-accent);
+  --st-awaiting: var(--c-warn-text);
+  --st-done:     var(--c-primary);
+  --st-error:    #A33A2E;   /* 팔레트에 없어 새로 추가한 유일한 색.
+                               실패 상태를 경고(9A6B00)와 구분해야 해서 필요. */
+
+  /* ── 타이포 (5-3절) ── */
+  --font-sans: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo",
+               "Pretendard", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+  --fs-display: 32px;  /* docx 26pt 표지 대제목 */
+  --fs-h1:      22px;  /* docx 15pt H1 */
+  --fs-h2:      17px;  /* docx 12pt H2 */
+  --fs-lead:    16px;  /* docx 10pt Bold 리드 문단 */
+  --fs-body:    15px;  /* docx 10pt 본문 */
+  --fs-table:   14px;  /* docx 9.5pt 표 */
+  --fs-label:   13px;  /* docx 9pt 라벨 */
+  --fs-note:    12px;  /* docx 8pt 이하 각주 — 웹 하한 */
+
+  --lh-tight: 1.35;
+  --lh-body:  1.7;     /* 한글 본문은 영문보다 행간을 넉넉히 */
+
+  /* ── 간격 (4px 그리드) ── */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+
+  --radius:    6px;
+  --radius-lg: 10px;
+
+  /* docx에는 그림자 개념이 없다. 웹에서 층위를 만들기 위한 최소한만 쓴다. */
+  --shadow: 0 1px 3px rgba(15, 76, 92, 0.08);
+
+  /* ── 레이아웃 ── */
+  --w-sidebar: 260px;
+  --w-docpanel: 440px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--text-body);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+}

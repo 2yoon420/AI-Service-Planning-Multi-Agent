@@ -1,6 +1,6 @@
 # LLM API 클라이언트
+# Day1 연결 테스트(test_connection.py) 전용. 실제 파이프라인은 Upstage만 사용
 google-generativeai>=0.8.0
-anthropic>=0.40.0
 
 # 오케스트레이션
 langgraph>=0.2.0
@@ -24,5 +24,20 @@ chromadb>=0.5.0
 # 시장조사 에이전트 웹검색 tool (API 키 불필요)
 ddgs>=9.0.0
 
+# Tavily는 별도 SDK 없이 requests로 REST를 직접 호출한다(위 requests 사용).
+# SDK를 안 쓰는 이유: 쓰는 엔드포인트가 /search·/extract 둘뿐이고, 의존성을
+# 늘리면 CI 설치 시간과 버전 충돌 위험만 커진다.
+
 # Writer 에이전트 DOCX 내보내기 (체크포인트3: KOSENA 템플릿 제출 형식 PDF/DOCX, A4)
 python-docx>=1.1.0
+
+# FastAPI 서버 (2026-07-27 추가, fastapi_설계도.md 10-6절)
+fastapi>=0.115.0
+# uvicorn은 다른 패키지의 전이 의존성으로 이미 설치돼 있으나, 직접 실행에 쓰므로 명시
+uvicorn[standard]>=0.30.0
+
+# 테스트 (2026-07-28 추가, 외부검토 2차 2-① / CI의 검사 대상)
+# pytest-asyncio는 일부러 쓰지 않는다 — 비동기 테스트는 asyncio.run()으로 처리해
+# CI 설치 의존성을 줄였다(tests/test_registry_runner.py의 _drive 참고).
+pytest>=8.0.0
+httpx>=0.27.0          # fastapi.testclient가 내부적으로 사용

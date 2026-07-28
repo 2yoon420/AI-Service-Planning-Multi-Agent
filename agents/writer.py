@@ -34,6 +34,8 @@ import os
 import re
 from datetime import date
 from pathlib import Path
+
+from paths import data_path
 from typing import Optional
 
 from openai import OpenAI
@@ -44,8 +46,12 @@ from agents.pestel import run_pestel_analysis
 from fact_store.schema import Competitor, Fact, MarketSizing, VerificationStatus
 from fact_store.store import get_fact, init_db, latest_market_sizing, list_competitors
 
+import logging
+
+log = logging.getLogger(__name__)
+
 WRITER_MODEL = os.getenv("HEAVY_MODEL", "solar-pro2")
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "outputs"
+OUTPUT_DIR = data_path("outputs", Path(__file__).resolve().parent.parent / "outputs")
 
 EXEC_SUMMARY_SCHEMA = {
     "type": "json_schema",
@@ -361,6 +367,7 @@ def run_writer(
     competitors: Optional[list[Competitor]] = None,
     save: bool = True,
     revision_note: Optional[str] = None,
+    return_paths: bool = False,
 ) -> str:
     """기획서 초안(마크다운 문자열)을 조립해 반환한다.
 
@@ -382,7 +389,7 @@ def run_writer(
     if pestel_summaries is None:
         pestel_summaries = run_pestel_analysis(topic, target_market)
 
-    print("[Writer 에이전트] 개요/핵심 요약 작성 중...")
+    log.info("[Writer 에이전트] 개요/핵심 요약 작성 중...")
     exec_summary = write_executive_summary(
         client, topic, target_market, market_sizing, pestel_summaries, competitors
     )
@@ -391,10 +398,10 @@ def run_writer(
     pestel_md = _format_pestel_md(pestel_summaries)
     competitor_table_md = _format_competitors_table_md(competitors)
 
-    print("[Writer 에이전트] 경쟁사 포지셔닝 서술 작성 중...")
+    log.info("[Writer 에이전트] 경쟁사 포지셔닝 서술 작성 중...")
     positioning_md = write_positioning_narrative(client, competitors)
 
-    print("[Writer 에이전트] 종합 시사점 작성 중...")
+    log.info("[Writer 에이전트] 종합 시사점 작성 중...")
     synthesis_md = write_synthesis(
         client, topic, target_market, sizing_md, pestel_md, competitor_table_md
     )
@@ -437,8 +444,9 @@ def run_writer(
 {source_appendix_md}
 """
 
-    print(f"[Writer 에이전트] 기획서 초안 조립 완료 ({len(doc)}자)")
+    log.info(f"[Writer 에이전트] 기획서 초안 조립 완료 ({len(doc)}자)")
 
+    docx_path = None
     if save:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         base_name = f"{_slugify(topic)}_{_slugify(target_market)}_기획서초안"
@@ -458,9 +466,9 @@ def run_writer(
             output_path=OUTPUT_DIR / f"{base_name}.docx",
             revision_note=revision_note,
         )
-        print(f"[Writer 에이전트] 저장 완료(docx, 제출용): {docx_path}")
+        log.info(f"[Writer 에이전트] 저장 완료(docx, 제출용): {docx_path}")
 
-    return doc
+    return (doc, docx_path) if return_paths else doc
 
 
 if __name__ == "__main__":

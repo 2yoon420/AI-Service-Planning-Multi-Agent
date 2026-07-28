@@ -13,6 +13,8 @@ import os
 import re
 from pathlib import Path
 
+from paths import data_path
+
 import chromadb
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -22,7 +24,7 @@ from rag.parse_documents import parse_pdf_to_markdown
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # multi-agent-system의 상위 = 프로젝트 폴더
-CHROMA_DIR = Path(__file__).parent / "chroma_db"
+CHROMA_DIR = data_path("chroma_db", Path(__file__).parent / "chroma_db")
 COLLECTION_NAME = "tta_ncs_corpus"
 
 CHUNK_SIZE = 800   # 문자 기준 (한국어 특성상 토큰보다 문자 기준이 다루기 쉬움)

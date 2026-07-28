@@ -39,6 +39,8 @@ import operator
 import sqlite3
 from contextlib import closing, contextmanager
 from pathlib import Path
+
+from paths import data_path
 from typing import Annotated, Optional, TypedDict
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -54,12 +56,16 @@ from agents.market_research import (
     run_targeted_research,
 )
 from agents.pestel import run_pestel_analysis
-from agents.router import REVISION_CAP, answer_capability_question, decide_next_action
+from agents.router import QA_CAP, REVISION_CAP, answer_capability_question, decide_next_action
 from agents.writer import run_writer
 from fact_store.schema import Competitor, Fact, MarketSizing
 from fact_store.store import list_facts
 
-CHECKPOINT_DB_PATH = Path(__file__).parent / "checkpoints.db"
+import logging
+
+log = logging.getLogger(__name__)
+
+CHECKPOINT_DB_PATH = data_path("checkpoints.db", Path(__file__).parent / "checkpoints.db")
 
 # 2026-07-24 추가: PlanningState에 fact_store.schema의 Pydantic 모델(Fact/MarketSizing/
 # Competitor)과 그 안에 쓰이는 Enum(SourceTier/VerificationStatus/CompetitorType)이 그대로
@@ -79,7 +85,7 @@ _ALLOWED_MSGPACK_MODULES = [
 
 
 @contextmanager
-def _open_checkpointer(conn_string: str):
+def open_checkpointer(conn_string: str):
     """SqliteSaver.from_conn_string()과 동작은 같지만(연결을 열고, 끝나면 닫음),
     allowed_msgpack_modules를 지정한 커스텀 serde를 써서 위 경고를 없앤다.
     from_conn_string()은 serde를 받는 인자가 없어(langgraph 소스 확인함), 직접
@@ -115,6 +121,13 @@ class PlanningState(TypedDict):
     # router가 판단한 target_query를 재실행 노드/capability_qa에 전달하는 통로.
     pending_action_query: Optional[str]
 
+    # --- 2026-07-27 추가 (FastAPI 설계도 10-2절) ---
+    # writer_node가 만든 DOCX의 절대경로. 다운로드 엔드포인트가 이 값을 쓴다.
+    draft_docx_path: Optional[str]
+    # capability_qa 호출 횟수. revision_count와 달리 에이전트를 재실행하지 않으므로
+    # 기존엔 아무 상한이 없었는데, API로 열면 무제한 LLM 비용이 된다(외부 검토 ⑥).
+    qa_count: int
+
 
 def research_node(state: PlanningState) -> dict:
     """시장조사 에이전트 실행 — 리서치 질문 생성부터 TAM/SAM/SOM 계산까지."""
@@ -146,17 +159,17 @@ def competitor_node(state: PlanningState) -> dict:
 def join_node(state: PlanningState) -> dict:
     """PESTEL·경쟁사비교 결과를 합쳐 중간 요약 로그를 출력. 파이프라인은 여기서 끝나지
     않고 뒤이어 writer 노드로 넘어간다."""
-    print("\n[Orchestrator] research/PESTEL/경쟁사비교 완료 요약")
-    print(f"  - fact: {len(state.get('facts', []))}개")
-    print(f"  - PESTEL 축 요약: {len(state.get('pestel_summaries', []))}개")
-    print(f"  - 경쟁사 프로필: {len(state.get('competitors', []))}개")
+    log.info("\n[Orchestrator] research/PESTEL/경쟁사비교 완료 요약")
+    log.info(f"  - fact: {len(state.get('facts', []))}개")
+    log.info(f"  - PESTEL 축 요약: {len(state.get('pestel_summaries', []))}개")
+    log.info(f"  - 경쟁사 프로필: {len(state.get('competitors', []))}개")
     errors = state.get("errors", [])
     if errors:
-        print(f"  - 오류 {len(errors)}건 발생:")
+        log.info(f"  - 오류 {len(errors)}건 발생:")
         for e in errors:
-            print(f"    · {e}")
+            log.info(f"    · {e}")
     else:
-        print("  - 오류 없음")
+        log.info("  - 오류 없음")
     return {}
 
 
@@ -183,15 +196,20 @@ def writer_node(state: PlanningState) -> dict:
     revision_count = state.get("revision_count", 0)
     revision_note = f"{revision_count}차 수정본" if revision_count > 0 else None
     try:
-        doc = run_writer(
+        doc, docx_path = run_writer(
             state["topic"],
             state["target_market"],
             market_sizing=state.get("market_sizing") or None,
             pestel_summaries=state.get("pestel_summaries") or None,
             competitors=state.get("competitors") or None,
             revision_note=revision_note,
+            return_paths=True,
         )
-        return {"draft_markdown": doc, "awaiting_user": True}
+        return {
+            "draft_markdown": doc,
+            "draft_docx_path": str(docx_path) if docx_path else None,
+            "awaiting_user": True,
+        }
     except Exception as e:
         return {"errors": [f"[Writer] {type(e).__name__}: {e}"], "awaiting_user": True}
 
@@ -254,7 +272,7 @@ def router_node(state: PlanningState) -> Command:
             },
         )
 
-    print(f"[Router] action={decision['action']} | 근거: {decision['reasoning']}")
+    log.info(f"[Router] action={decision['action']} | 근거: {decision['reasoning']}")
     action = decision["action"]
     target_query = decision.get("target_query", "")
 
@@ -270,6 +288,18 @@ def router_node(state: PlanningState) -> Command:
     if action == "revise_competitor":
         return Command(goto="competitor_revision", update={"pending_action_query": target_query})
     if action == "capability_question":
+        if state.get("qa_count", 0) >= QA_CAP:
+            return Command(
+                goto="await_review",
+                update={
+                    "chat_history": [{
+                        "role": "assistant",
+                        "content": f"기능 질문 답변 한도({QA_CAP}회)에 도달했습니다. "
+                                   f"초안 수정 요청만 처리할 수 있습니다.",
+                    }],
+                    "awaiting_user": True,
+                },
+            )
         return Command(goto="capability_qa", update={"pending_action_query": target_query})
 
     # action == "unclear" (또는 스키마 enum 밖의 예상 못 한 값 — 방어적으로 같은 경로로 처리)
@@ -345,26 +375,35 @@ def competitor_revision_node(state: PlanningState) -> dict:
 def capability_qa_node(state: PlanningState) -> dict:
     """Router가 capability_question으로 판단했을 때 실행. fact_store나 다른 에이전트를
     전혀 건드리지 않고 서비스 기능 RAG(capability_corpus)에서만 답을 찾아 chat_history에
-    추가한다. 에이전트 재실행이 아니므로 revision_count는 올리지 않는다(설계안 3-2절)."""
+    추가한다. 에이전트 재실행이 아니므로 revision_count는 올리지 않는다(설계안 3-2절).
+
+    2026-07-27 추가: qa_count는 올린다 — API로 노출되면 호출 횟수 자체엔 상한이
+    없었으므로(REVISION_CAP과 달리), router_node가 QA_CAP 도달 여부를 판단하는
+    근거로 여기서 센다."""
     question = state.get("pending_action_query", "")
+    next_qa_count = state.get("qa_count", 0) + 1
     try:
         answer = answer_capability_question(question)
-        return {"chat_history": [{"role": "assistant", "content": answer}]}
+        return {
+            "chat_history": [{"role": "assistant", "content": answer}],
+            "qa_count": next_qa_count,
+        }
     except Exception as e:
         return {
             "chat_history": [{"role": "assistant", "content": "죄송합니다, 답변 생성 중 오류가 발생했습니다."}],
             "errors": [f"[capability_qa] {type(e).__name__}: {e}"],
+            "qa_count": next_qa_count,
         }
 
 
 def finalize_node(state: PlanningState) -> dict:
     """세션 종료 처리 — 승인 또는 재작업 한도 도달로 도달한다. 새 부가 로직은 없고,
     join_node와 같은 원칙으로 종료 사유를 로그에 남긴다."""
-    print("\n[Orchestrator] 세션 종료 처리")
+    log.info("\n[Orchestrator] 세션 종료 처리")
     if state.get("revision_count", 0) >= REVISION_CAP:
-        print(f"  - 재작업 한도({REVISION_CAP}회) 도달로 자동 종료")
+        log.info(f"  - 재작업 한도({REVISION_CAP}회) 도달로 자동 종료")
     else:
-        print("  - 사용자 승인으로 종료")
+        log.info("  - 사용자 승인으로 종료")
     return {}
 
 
@@ -419,6 +458,8 @@ def _initial_state(topic: str, target_market: str) -> PlanningState:
         "revision_count": 0,
         "awaiting_user": False,
         "pending_action_query": None,
+        "draft_docx_path": None,
+        "qa_count": 0,
     }
 
 
@@ -432,54 +473,91 @@ def _extract_response(result: dict) -> dict:
         return {
             "paused": True,
             "draft_markdown": payload.get("draft_markdown"),
+            "draft_docx_path": result.get("draft_docx_path"),
             "prompt": payload.get("prompt"),
         }
     return {
         "paused": False,
         "draft_markdown": result.get("draft_markdown"),
+        "draft_docx_path": result.get("draft_docx_path"),
         "errors": result.get("errors", []),
     }
 
 
-def start_project(topic: str, target_market: str, thread_id: str, checkpointer=None) -> dict:
+def start_project(
+    topic: str, target_market: str, thread_id: str, checkpointer=None, graph=None
+) -> dict:
     """새 프로젝트를 최초 실행한다. research -> ... -> writer까지 실행된 뒤 await_review의
     interrupt()에서 멈추고, 초안과 안내 문구를 담은 응답을 반환한다.
 
-    thread_id는 Task #7(FastAPI) 도입 시 project_id와 같은 개념으로 쓰인다 — LangGraph는
-    이 값으로 체크포인터에 저장된 그래프 상태를 구분한다(설계안 3-2절 참고).
+    thread_id는 project_id와 같은 개념으로 쓰인다 — LangGraph는 이 값으로 체크포인터에
+    저장된 그래프 상태를 구분한다(설계안 3-2절 참고).
 
-    checkpointer를 주지 않으면 이 프로젝트 폴더의 orchestrator/checkpoints.db를 쓰는
-    동기 SqliteSaver를 연다. 테스트 코드에서는 MemorySaver 등을 직접 넘겨 파일 없이
-    검증할 수 있다."""
+    graph를 주면(FastAPI가 앱 시작 시 미리 컴파일해둔 그래프를 넘기는 경우) checkpointer를
+    다시 열거나 build_graph()를 다시 부르지 않고 그 그래프를 그대로 쓴다 — 매 요청마다
+    sqlite 연결을 새로 여는 낭비를 없애기 위함(설계도 4-3절). graph도 checkpointer도
+    안 주면(기존 CLI 동작) 이 프로젝트 폴더의 orchestrator/checkpoints.db를 쓰는 동기
+    SqliteSaver를 연다. 테스트 코드에서는 checkpointer로 MemorySaver 등을 직접 넘겨 파일
+    없이 검증할 수 있다."""
+    config = {"configurable": {"thread_id": thread_id}}
+    initial = _initial_state(topic, target_market)
+    if graph is not None:
+        return _extract_response(graph.invoke(initial, config=config))
     if checkpointer is not None:
-        app = build_graph(checkpointer)
-        config = {"configurable": {"thread_id": thread_id}}
-        return _extract_response(app.invoke(_initial_state(topic, target_market), config=config))
-
-    with _open_checkpointer(str(CHECKPOINT_DB_PATH)) as saver:
-        app = build_graph(saver)
-        config = {"configurable": {"thread_id": thread_id}}
-        return _extract_response(app.invoke(_initial_state(topic, target_market), config=config))
+        return _extract_response(build_graph(checkpointer).invoke(initial, config=config))
+    with open_checkpointer(str(CHECKPOINT_DB_PATH)) as saver:
+        return _extract_response(build_graph(saver).invoke(initial, config=config))
 
 
-def submit_message(thread_id: str, message: str, checkpointer=None) -> dict:
+def submit_message(thread_id: str, message: str, checkpointer=None, graph=None) -> dict:
     """await_review에서 멈춰 있는 프로젝트에 사용자 메시지를 전달해 재개한다.
     router가 판단해 재실행 노드를 거치면 다시 await_review에서 멈추고(paused=True),
-    승인되거나 재작업 한도에 도달하면 finalize를 거쳐 END에 도달한다(paused=False)."""
-    if checkpointer is not None:
-        app = build_graph(checkpointer)
-        config = {"configurable": {"thread_id": thread_id}}
-        return _extract_response(app.invoke(Command(resume=message), config=config))
+    승인되거나 재작업 한도에 도달하면 finalize를 거쳐 END에 도달한다(paused=False).
 
-    with _open_checkpointer(str(CHECKPOINT_DB_PATH)) as saver:
-        app = build_graph(saver)
-        config = {"configurable": {"thread_id": thread_id}}
-        return _extract_response(app.invoke(Command(resume=message), config=config))
+    graph 재사용 규칙은 start_project()와 같다."""
+    config = {"configurable": {"thread_id": thread_id}}
+    command = Command(resume=message)
+    if graph is not None:
+        return _extract_response(graph.invoke(command, config=config))
+    if checkpointer is not None:
+        return _extract_response(build_graph(checkpointer).invoke(command, config=config))
+    with open_checkpointer(str(CHECKPOINT_DB_PATH)) as saver:
+        return _extract_response(build_graph(saver).invoke(command, config=config))
+
+
+def get_session_state(thread_id: str, graph) -> dict:
+    """지금 이 세션이 어느 노드를 실행 중이고 어떤 상태인지 반환한다.
+    _check_existing_session()이 하던 일을 일반화한 것 — 그 함수는 이 함수를 부르는
+    얇은 래퍼로 바뀐다(CLI 동작은 그대로)."""
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = graph.get_state(config)
+    values = snapshot.values or {}
+
+    interrupted = False
+    prompt = None
+    for task in snapshot.tasks:
+        if task.interrupts:
+            interrupted = True
+            prompt = task.interrupts[0].value.get("prompt")
+            break
+
+    return {
+        "exists": bool(values),
+        "next_nodes": tuple(snapshot.next or ()),
+        "interrupted": interrupted,
+        "prompt": prompt,
+        "draft_markdown": values.get("draft_markdown"),
+        "draft_docx_path": values.get("draft_docx_path"),
+        "chat_history": values.get("chat_history", []),
+        "revision_count": values.get("revision_count", 0),
+        "qa_count": values.get("qa_count", 0),
+    }
 
 
 def _check_existing_session(thread_id: str) -> Optional[dict]:
     """thread_id에 await_review로 이미 멈춰있는 세션이 있으면 그 payload를 반환하고,
     없으면(새 thread_id이거나 이미 finalize까지 끝난 thread_id) None을 반환한다.
+    CLI 전용. get_session_state()의 얇은 래퍼로 축소한다(2026-07-27).
 
     2026-07-24 추가: 사용자가 같은 topic으로 CLI를 반복 실행하면(예: 세션 중간에
     Ctrl-C 후 재실행) 매번 research_node부터 다시 돌아 Fact Store에 fact가 계속
@@ -488,26 +566,23 @@ def _check_existing_session(thread_id: str) -> Optional[dict]:
     invoke하면 매번 START부터 그대로 다시 실행한다(start_project()는 항상 "새 프로젝트
     시작"이라는 뜻). 그래서 CLI가 먼저 "이미 멈춰있는 세션이 있는지"를 확인해, 있으면
     start_project() 호출 자체를 건너뛰도록 했다."""
-    config = {"configurable": {"thread_id": thread_id}}
-    with _open_checkpointer(str(CHECKPOINT_DB_PATH)) as saver:
-        app = build_graph(saver)
-        state = app.get_state(config)
-        if not state.next:
-            return None
-        for task in state.tasks:
-            if task.interrupts:
-                payload = task.interrupts[0].value
-                return {
-                    "paused": True,
-                    "draft_markdown": payload.get("draft_markdown"),
-                    "prompt": payload.get("prompt"),
-                }
-    return None
+    with open_checkpointer(str(CHECKPOINT_DB_PATH)) as saver:
+        snapshot = get_session_state(thread_id, build_graph(saver))
+    if not snapshot["next_nodes"]:
+        return None
+    if not snapshot["interrupted"]:
+        return None
+    return {
+        "paused": True,
+        "draft_markdown": snapshot["draft_markdown"],
+        "prompt": snapshot["prompt"],
+    }
 
 
 if __name__ == "__main__":
     import sys
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     if len(sys.argv) < 3:
         print('사용법: python -m orchestrator.graph "<연구대상>" "<목표시장>" [thread_id]')
         sys.exit(1)
@@ -517,23 +592,23 @@ if __name__ == "__main__":
 
     response = _check_existing_session(thread_id_arg)
     if response is not None:
-        print(f"[Orchestrator] 기존 세션을 이어갑니다 (thread_id={thread_id_arg}) — 리서치를 다시 하지 않습니다.")
+        log.info(f"[Orchestrator] 기존 세션을 이어갑니다 (thread_id={thread_id_arg}) — 리서치를 다시 하지 않습니다.")
     else:
-        print(f"[Orchestrator] 새 프로젝트 시작 (thread_id={thread_id_arg})")
+        log.info(f"[Orchestrator] 새 프로젝트 시작 (thread_id={thread_id_arg})")
         response = start_project(topic_arg, target_market_arg, thread_id_arg)
 
     while response.get("paused"):
         draft_preview = (response.get("draft_markdown") or "")[:500]
-        print(f"\n{response.get('prompt', '')}")
-        print(f"\n--- 초안 미리보기(앞부분 500자) ---\n{draft_preview}\n---")
+        log.info(f"\n{response.get('prompt', '')}")
+        log.info(f"\n--- 초안 미리보기(앞부분 500자) ---\n{draft_preview}\n---")
         try:
             user_input = input("\n> ")
         except EOFError:
-            print("\n(입력 종료 — 세션은 저장되어 있으니 같은 thread_id로 나중에 다시 이어갈 수 있습니다.)")
+            log.info("\n(입력 종료 — 세션은 저장되어 있으니 같은 thread_id로 나중에 다시 이어갈 수 있습니다.)")
             break
         response = submit_message(thread_id_arg, user_input)
 
     if not response.get("paused"):
-        print("\n[Orchestrator] 세션 종료 — 최종 기획서 초안이 완성되었습니다.")
+        log.info("\n[Orchestrator] 세션 종료 — 최종 기획서 초안이 완성되었습니다.")
         if response.get("errors"):
-            print(f"  (참고: 진행 중 오류 {len(response['errors'])}건 — 위 로그 참고)")
+            log.info(f"  (참고: 진행 중 오류 {len(response['errors'])}건 — 위 로그 참고)")

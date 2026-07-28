@@ -35,6 +35,10 @@ from agents.web_search import chunk_text, search_web
 from fact_store.schema import Competitor, CompetitorType, Fact, SourceTier, VerificationStatus
 from fact_store.store import init_db, list_facts, save_competitor, save_fact_if_new
 
+import logging
+
+log = logging.getLogger(__name__)
+
 HEAVY_MODEL = os.getenv("HEAVY_MODEL", "solar-pro2")
 
 COMPETITOR_TYPE_VALUES = [t.value for t in CompetitorType]
@@ -370,7 +374,7 @@ def _consolidate_duplicate_competitors(client: OpenAI, candidates: list[dict]) -
         merged_ids: set = set()
         for m in members:
             merged_ids.update(by_name[m].get("mentioned_fact_ids", []))
-        print(f"  [엔티티 통합] {', '.join(members)} → {g['canonical_name']}")
+        log.info(f"  [엔티티 통합] {', '.join(members)} → {g['canonical_name']}")
         consolidated.append({**base, "name": g["canonical_name"], "mentioned_fact_ids": list(merged_ids)})
 
     # LLM이 목록의 이름을 하나라도 그룹에서 빠뜨릴 수 있어(완전한 커버리지가 보장되지 않음),
@@ -459,7 +463,7 @@ fact 목록:
                 merged[key] = {**c, "name": canonical_name}
 
     if all_dropped:
-        print(f"  [필터링] 경쟁사가 아닌 것으로 판단해 제외: {all_dropped}")
+        log.info(f"  [필터링] 경쟁사가 아닌 것으로 판단해 제외: {all_dropped}")
 
     result = list(merged.values())
     # 배치 병합 + 코드 레벨 정규화까지 끝난 뒤에도, PRODUCT_TO_COMPANY_MAP에 없는 새로운
@@ -501,7 +505,7 @@ def _flag_missed_competitor_mentions(facts: list[Fact], candidates: list[dict]) 
         if not any(brand.lower() in name or name in brand.lower() for name in candidate_names_lower)
     )
     if missed:
-        print(f"  [⚠️ 완전성 경고] fact에 언급된 것으로 보이나 경쟁사 후보에서 누락된 브랜드명: {missed}"
+        log.info(f"  [⚠️ 완전성 경고] fact에 언급된 것으로 보이나 경쟁사 후보에서 누락된 브랜드명: {missed}"
               f" — identify_competitors()가 놓쳤을 가능성이 있으니 원본 fact를 사람이 재확인하세요.")
     return missed
 
@@ -571,7 +575,7 @@ def select_top_competitors(candidates: list[dict], facts: list[Fact]) -> list[di
         ranked = sorted(group, key=lambda c: _competitor_sort_key(c, facts_by_id))
         kept, dropped = ranked[:cap], ranked[cap:]
         if dropped:
-            print(
+            log.info(
                 f"  [경쟁사 상한 적용] {type_value}: {len(group)}개 중 상위 {cap}개만 유지 "
                 f"({', '.join(c['name'] for c in kept)}), 제외: {[c['name'] for c in dropped]}"
             )
@@ -642,19 +646,19 @@ def build_competitor_profiles(client: OpenAI, facts: list[Fact], candidates: lis
 def print_comparison_table(competitors: list[Competitor]) -> None:
     """경쟁사(행) x 비교축(열) 형태로 콘솔에 출력한다 (파이프라인 문서 3-4절)."""
     if not competitors:
-        print("[경쟁사비교 에이전트] 식별된 경쟁사가 없습니다.")
+        log.info("[경쟁사비교 에이전트] 식별된 경쟁사가 없습니다.")
         return
 
     for c in competitors:
-        print(f"\n=== {c.name} ({c.type.value}) ===")
-        print(f"  가격: {c.price or '(정보 없음)'}")
-        print(f"  핵심 기능: {', '.join(c.key_features) or '(정보 없음)'}")
-        print(f"  타깃 고객: {c.target_customer or '(정보 없음)'}")
-        print(f"  채널: {c.channel or '(정보 없음)'}")
-        print(f"  투자/매출: {c.funding_or_revenue or '(정보 없음)'}")
-        print(f"  강점: {', '.join(c.strengths) or '(정보 없음)'}")
-        print(f"  약점: {', '.join(c.weaknesses) or '(정보 없음)'}")
-        print(f"  근거 fact: {c.source_fact_ids}")
+        log.info(f"\n=== {c.name} ({c.type.value}) ===")
+        log.info(f"  가격: {c.price or '(정보 없음)'}")
+        log.info(f"  핵심 기능: {', '.join(c.key_features) or '(정보 없음)'}")
+        log.info(f"  타깃 고객: {c.target_customer or '(정보 없음)'}")
+        log.info(f"  채널: {c.channel or '(정보 없음)'}")
+        log.info(f"  투자/매출: {c.funding_or_revenue or '(정보 없음)'}")
+        log.info(f"  강점: {', '.join(c.strengths) or '(정보 없음)'}")
+        log.info(f"  약점: {', '.join(c.weaknesses) or '(정보 없음)'}")
+        log.info(f"  근거 fact: {c.source_fact_ids}")
 
 
 def _search_extract_and_save(
@@ -672,7 +676,7 @@ def _search_extract_and_save(
     활용한다(recall 개선, 9절). 검증 단계 설계는 market_research.py와 동일
     (파이프라인 문서 13절 참고)."""
     results = search_web(query, max_results=results_per_query, fetch_full_text=True)
-    print(f"  검색결과 {len(results)}건")
+    log.info(f"  검색결과 {len(results)}건")
 
     n_facts_this_query = 0
     newly_saved_with_content: list[tuple[Fact, str]] = []
@@ -681,7 +685,7 @@ def _search_extract_and_save(
         chunks = chunk_text(raw_content)
         filtered_content = filter_relevant_chunks(client, chunks, topic, target_market, query)
         if not filtered_content:
-            print(f"  [청크필터] 관련 청크 없음 — 건너뜀: {result['url']}")
+            log.info(f"  [청크필터] 관련 청크 없음 — 건너뜀: {result['url']}")
             continue
         result = {**result, "content": filtered_content}
 
@@ -700,15 +704,22 @@ def _search_extract_and_save(
             run_facts.append(stored_fact)
             n_facts_this_query += 1
             if is_new:
-                print(f"  [fact 저장] ({stored_fact.source_tier.value}) {text}")
+                log.info(
+                    f"  [fact 저장] ({stored_fact.source_tier.value}) {text}",
+                    extra={
+                        "kind": "fact",
+                        "url": stored_fact.source_url,
+                        "tier": stored_fact.source_tier.value,
+                    },
+                )
                 counters["n_saved"] += 1
                 newly_saved_with_content.append((stored_fact, filtered_content))
             else:
-                print(f"  [중복 건너뜀 — 기존 {stored_fact.id}와 유사] {text}")
+                log.info(f"  [중복 건너뜀 — 기존 {stored_fact.id}와 유사] {text}")
                 counters["n_duplicates"] += 1
 
     if newly_saved_with_content:
-        print(f"  [검증] 신규 fact {len(newly_saved_with_content)}개 배치 검증 중...")
+        log.info(f"  [검증] 신규 fact {len(newly_saved_with_content)}개 배치 검증 중...")
         verify_facts_batch(client, newly_saved_with_content, topic, target_market)
 
     return n_facts_this_query
@@ -864,10 +875,10 @@ def deep_dive_competitors(
     targets = ranked[:top_n]
 
     if not targets:
-        print("[경쟁사비교 에이전트] 심층조사 대상 직접 경쟁자가 없어 3단계를 건너뜁니다.")
+        log.info("[경쟁사비교 에이전트] 심층조사 대상 직접 경쟁자가 없어 3단계를 건너뜁니다.")
         return []
 
-    print(f"[경쟁사비교 에이전트] 심층조사(가격·채널·투자매출) 대상 {len(targets)}개: "
+    log.info(f"[경쟁사비교 에이전트] 심층조사(가격·채널·투자매출) 대상 {len(targets)}개: "
           f"{', '.join(c['name'] for c in targets)}")
 
     new_facts: list[Fact] = []
@@ -876,11 +887,11 @@ def deep_dive_competitors(
         name = candidate["name"]
         search_name = _canonical_company_name(name)
         if search_name != name:
-            print(f"\n[심층조사] {name} (검색은 실제 회사명 '{search_name}'으로 정규화)")
+            log.info(f"\n[심층조사] {name} (검색은 실제 회사명 '{search_name}'으로 정규화)")
         else:
-            print(f"\n[심층조사] {name}")
+            log.info(f"\n[심층조사] {name}")
         for query in _deep_dive_queries(search_name, target_market):
-            print(f"  [검색] {query}")
+            log.info(f"  [검색] {query}")
             _search_extract_and_save(
                 client, query, topic, target_market, results_per_query, new_facts, counters
             )
@@ -900,9 +911,9 @@ def deep_dive_competitors(
         ]
         candidate["mentioned_fact_ids"].extend(f.id for f in attributed)
         if attributed:
-            print(f"  [귀속] {name}에 새 근거 fact {len(attributed)}개 추가")
+            log.info(f"  [귀속] {name}에 새 근거 fact {len(attributed)}개 추가")
 
-    print(f"\n[경쟁사비교 에이전트] 심층조사로 fact {counters['n_saved']}개 신규 저장, "
+    log.info(f"\n[경쟁사비교 에이전트] 심층조사로 fact {counters['n_saved']}개 신규 저장, "
           f"중복 {counters['n_duplicates']}개 건너뜀")
     return new_facts
 
@@ -931,7 +942,7 @@ def run_competitor_analysis(
     init_db()
     client = get_client()
 
-    print(f"[경쟁사비교 에이전트] 연구대상: {topic} / 목표시장: {target_market}")
+    log.info(f"[경쟁사비교 에이전트] 연구대상: {topic} / 목표시장: {target_market}")
 
     # 검색 질문을 짜기 전에, 시장조사 단계 등에서 이미 모아둔 관련 fact가 있는지 먼저
     # 확인한다(2026-07-23 변경, 파이프라인 문서 30절). topic 일치 판정 로직은 2026-07-24부터
@@ -941,26 +952,26 @@ def run_competitor_analysis(
     queries = generate_competitor_queries(
         client, topic, target_market, n=n_queries, existing_facts=existing_topic_facts
     )
-    print(f"[경쟁사비교 에이전트] 검색 질문 {len(queries)}개 생성:")
+    log.info(f"[경쟁사비교 에이전트] 검색 질문 {len(queries)}개 생성:")
     for q in queries:
-        print(f"  - {q}")
+        log.info(f"  - {q}")
 
     counters = {"n_saved": 0, "n_duplicates": 0}
     run_facts: list[Fact] = []  # 이번 실행에서 실제로 다룬 fact (검색 질문 문구와 무관하게 반드시 포함시키기 위함)
     for query in queries:
-        print(f"\n[검색] {query}")
+        log.info(f"\n[검색] {query}")
         n_this_q = _search_extract_and_save(
             client, query, topic, target_market, results_per_query, run_facts, counters
         )
 
         if n_this_q == 0:
             retry_query = simplify_query(client, query)
-            print(f"  [재시도] 이 질문에서 fact를 못 찾음 → 더 일반적인 검색어로 재검색: {retry_query}")
+            log.info(f"  [재시도] 이 질문에서 fact를 못 찾음 → 더 일반적인 검색어로 재검색: {retry_query}")
             _search_extract_and_save(
                 client, retry_query, topic, target_market, results_per_query, run_facts, counters
             )
 
-    print(f"\n[경쟁사비교 에이전트] fact {counters['n_saved']}개 신규 저장, 중복 {counters['n_duplicates']}개 건너뜀")
+    log.info(f"\n[경쟁사비교 에이전트] fact {counters['n_saved']}개 신규 저장, 중복 {counters['n_duplicates']}개 건너뜀")
 
     # 이번 실행에서 다룬 fact(run_facts)는 검색 질문(topic_relevance) 문구와 무관하게 항상 포함한다.
     # 과거 fact는 fact_store.list_facts(topic=topic)에 판정을 위임한다(topic 필드가 있으면
@@ -969,11 +980,11 @@ def run_competitor_analysis(
     run_fact_ids = {f.id for f in run_facts}
     historical_facts = [f for f in list_facts(topic=topic) if f.id not in run_fact_ids]
     all_facts = run_facts + historical_facts
-    print(f"[경쟁사비교 에이전트] 대상 fact {len(all_facts)}개 로드 완료 "
+    log.info(f"[경쟁사비교 에이전트] 대상 fact {len(all_facts)}개 로드 완료 "
           f"(이번 실행 {len(run_facts)}개 + 과거 fact 중 topic 일치 {len(historical_facts)}개)")
 
     if not all_facts:
-        print("[경쟁사비교 에이전트] 경고: 관련 fact가 없어 경쟁사 식별을 진행할 수 없습니다.")
+        log.info("[경쟁사비교 에이전트] 경고: 관련 fact가 없어 경쟁사 식별을 진행할 수 없습니다.")
         return []
 
     # 검증·출처 에이전트가 "기각"(REJECTED) 판정한 fact는 경쟁사 식별·프로필링 근거에서
@@ -983,30 +994,30 @@ def run_competitor_analysis(
     verified_facts = [f for f in all_facts if f.verification_status != VerificationStatus.REJECTED]
     n_rejected = len(all_facts) - len(verified_facts)
     if n_rejected:
-        print(f"[경쟁사비교 에이전트] 검증 에이전트가 기각한 fact {n_rejected}개를 분석 대상에서 제외")
+        log.info(f"[경쟁사비교 에이전트] 검증 에이전트가 기각한 fact {n_rejected}개를 분석 대상에서 제외")
     all_facts = verified_facts
 
-    print("[경쟁사비교 에이전트] 경쟁사 식별 중...")
+    log.info("[경쟁사비교 에이전트] 경쟁사 식별 중...")
     candidates = identify_competitors(client, all_facts)
     if not candidates:
-        print("[경쟁사비교 에이전트] fact 목록에서 실제로 언급된 경쟁사를 찾지 못했습니다.")
+        log.info("[경쟁사비교 에이전트] fact 목록에서 실제로 언급된 경쟁사를 찾지 못했습니다.")
         return []
-    print(f"[경쟁사비교 에이전트] 경쟁사 후보 {len(candidates)}개 식별: "
+    log.info(f"[경쟁사비교 에이전트] 경쟁사 후보 {len(candidates)}개 식별: "
           f"{', '.join(c['name'] + '(' + c['type'] + ')' for c in candidates)}")
     _flag_missed_competitor_mentions(all_facts, candidates)
 
     candidates = select_top_competitors(candidates, all_facts)
-    print(f"[경쟁사비교 에이전트] 유형별 상한 적용 후 최종 {len(candidates)}개: "
+    log.info(f"[경쟁사비교 에이전트] 유형별 상한 적용 후 최종 {len(candidates)}개: "
           f"{', '.join(c['name'] + '(' + c['type'] + ')' for c in candidates)}")
 
     if deep_dive_top_n > 0:
-        print("\n[경쟁사비교 에이전트] 상위 직접 경쟁자 심층조사 시작...")
+        log.info("\n[경쟁사비교 에이전트] 상위 직접 경쟁자 심층조사 시작...")
         deep_dive_facts = deep_dive_competitors(
             client, candidates, topic, target_market, top_n=deep_dive_top_n
         )
         all_facts = all_facts + deep_dive_facts
 
-    print("\n[경쟁사비교 에이전트] 경쟁사별 비교 프로필 구조화 중...")
+    log.info("\n[경쟁사비교 에이전트] 경쟁사별 비교 프로필 구조화 중...")
     profiles = build_competitor_profiles(client, all_facts, candidates)
 
     type_by_name = {c["name"]: c["type"] for c in candidates}

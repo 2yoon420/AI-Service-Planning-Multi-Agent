@@ -18,13 +18,34 @@ from ddgs import DDGS
 
 from fact_store.schema import SourceTier
 
-# 2026-07-23 추가: 다중 검색 백엔드(파이프라인 문서 32절 참고). ddgs 하나만 쓰다 보니
-# ddgs가 결과를 적게/못 주는 질의에서 recall이 그대로 죽는 문제가 있었음. Brave Search
-# API(무료 티어 월 2,000건)를 보조 백엔드로 추가해, ddgs 결과가 부족할 때만 부족한 만큼
-# 채워 넣는다. BRAVE_API_KEY가 .env에 없으면 이 백엔드는 조용히 건너뛴다(선택적 기능 —
-# 키 없이도 기존처럼 ddgs만으로 동작).
-BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
-BRAVE_FETCH_TIMEOUT = 8
+import logging
+
+log = logging.getLogger(__name__)
+
+# ── 보조 백엔드: Tavily (2026-07-28) ──────────────────────────────────────
+#
+# 2026-07-23에 Brave Search API를 보조 백엔드로 넣었으나, .env에 BRAVE_API_KEY를
+# 끝내 넣지 않아 `_search_brave()`는 첫 줄에서 빈 리스트를 반환하고 끝났다 —
+# **한 번도 실행된 적이 없다.** 지금 DB의 fact 650건은 전부 ddgs 단독으로 모인 것이다.
+# 즉 "다중 백엔드"라고 문서에 적혀 있었지만 실상은 폴백이 아예 없는 상태였고,
+# ddgs가 레이트리밋이나 빈 결과를 주면 그대로 빈손이 됐다.
+#
+# Brave는 2026년 2월부로 신규 무료 티어도 없앴으므로 되살릴 이유가 없다. 대신
+# Tavily를 넣는데, Brave가 못 하던 역할이 하나 더 있어서다.
+#
+#   검색 계층: ddgs (무료·기본)  →  부족하면 Tavily Search
+#   추출 계층: 정규식 간이 추출  →  실패·과소하면 Tavily Extract   ← Brave에 없던 것
+#
+# 추출 계층이 핵심이다. 파이프라인 문서 18절의 "심층조사 가격 정보 전멸"은 검색이
+# 아니라 **추출** 단계의 문제였다 — 가격이 JS로 렌더링되는 페이지에서 정규식 태그
+# 제거로는 아무것도 못 건진다. Brave는 스니펫만 돌려주므로 이 문제를 못 푼다.
+#
+# 두 계층 모두 "무료 빠른 경로 우선, 실패 시에만 비싼 경로"라는 이 프로젝트의 기존
+# 패턴을 따른다. TAVILY_API_KEY가 없으면 조용히 건너뛰고 ddgs 단독으로 폴백한다 —
+# 배포 환경에서 env 주입이 빠져도 파이프라인이 죽지 않아야 하기 때문이다.
+TAVILY_SEARCH_ENDPOINT = "https://api.tavily.com/search"
+TAVILY_EXTRACT_ENDPOINT = "https://api.tavily.com/extract"
+TAVILY_TIMEOUT = 15          # 검색보다 추출이 느리다(렌더링 대기). 근거 없는 임의값.
 
 # 검색 스니펫(1~2문장)만으로는 fact 추출이 부족한 경우가 많아(파이프라인 문서 9절 recall 이슈),
 # 상위 결과의 실제 페이지 본문을 가져와 함께 활용한다. HTML을 정교하게 파싱(readability 등)하지
@@ -32,6 +53,11 @@ BRAVE_FETCH_TIMEOUT = 8
 # 한계가 있음 — 빠른 MVP 구현을 위한 트레이드오프로 문서에 기록해둠.
 PAGE_FETCH_TIMEOUT = 8
 PAGE_FETCH_MAX_CHARS = 4000
+
+# 간이 추출 결과가 이 길이에 못 미치면 "JS 렌더링 때문에 못 건졌다"고 보고 Tavily로
+# 재시도한다. 근거 없는 임의값이다(설계값_레지스터.md 4절) — 값을 낮추면 Tavily 호출이
+# 늘고, 높이면 진짜 짧은 페이지에도 불필요한 호출이 간다.
+PAGE_FETCH_MIN_USEFUL_CHARS = 300
 
 # 2차 자료로 간주할 도메인 (정부·공공기관, 산업조사기관, 상장사 IR 등)
 #
@@ -103,10 +129,49 @@ PAGE_FETCH_USER_AGENT = (
 )
 
 
-def fetch_page_text(url: str, max_chars: int = PAGE_FETCH_MAX_CHARS) -> Optional[str]:
-    """스니펫 대신 쓸 수 있도록 페이지 실제 본문 텍스트를 가져온다. 실패하면 None을 반환해
-    호출부가 스니펫으로 폴백할 수 있게 한다(네트워크 오류·404·PDF 등 어떤 이유로든 실패를
-    전체 파이프라인이 멈추는 원인으로 만들지 않기 위함)."""
+def _tavily_api_key() -> Optional[str]:
+    """호출 시점에 읽는다. 임포트 시점에 캐시하면 테스트에서 monkeypatch가 안 먹고,
+    배포 후 env를 고쳤을 때 재시작 없이는 반영되지 않는다."""
+    key = os.getenv("TAVILY_API_KEY")
+    return key.strip() or None if key else None
+
+
+def _extract_tavily(url: str, max_chars: int = PAGE_FETCH_MAX_CHARS) -> Optional[str]:
+    """Tavily Extract로 본문을 가져온다. JS 렌더링 페이지 대응이 목적이다.
+
+    정규식 간이 추출이 실패하거나 결과가 너무 짧을 때만 호출되므로 **비용이 실패
+    시에만 발생**한다. 키가 없거나 호출이 실패하면 None을 반환해 호출부가 기존
+    동작을 그대로 이어가게 한다(이 파일 전체가 지키는 "실패를 흡수한다" 원칙)."""
+    api_key = _tavily_api_key()
+    if not api_key:
+        return None
+    try:
+        resp = requests.post(
+            TAVILY_EXTRACT_ENDPOINT,
+            json={"urls": [url], "extract_depth": "basic", "format": "text"},
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=TAVILY_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            log.info(f"  [Tavily 추출 실패] {url} — HTTP {resp.status_code}")
+            return None
+        data = resp.json() or {}
+        for item in data.get("results") or []:
+            raw = (item.get("raw_content") or "").strip()
+            if raw:
+                return re.sub(r"\s+", " ", raw)[:max_chars]
+        return None
+    except Exception as e:
+        log.info(f"  [Tavily 추출 실패] {url} ({type(e).__name__}: {e})")
+        return None
+
+
+def _fetch_page_text_direct(url: str, max_chars: int) -> Optional[str]:
+    """정규식 기반 간이 추출(무료·빠른 경로).
+
+    실패 사유는 남기되 kind는 붙이지 않는다 — 최종 실패 판정(kind=fetch_failed)은
+    Tavily 폴백까지 다 해본 뒤 fetch_page_text()가 내린다. 여기서 fetch_failed를
+    찍으면 프론트 출처 카드가 흐려진 뒤 성공 이벤트가 뒤따라 와 화면이 어긋난다."""
     try:
         resp = requests.get(
             url,
@@ -119,6 +184,9 @@ def fetch_page_text(url: str, max_chars: int = PAGE_FETCH_MAX_CHARS) -> Optional
         )
         content_type = resp.headers.get("Content-Type", "")
         if resp.status_code != 200 or "html" not in content_type.lower():
+            log.info(
+                f"  [읽기건너뜀] {url} (상태 {resp.status_code}, {content_type or '타입 없음'})"
+            )
             return None
         html = resp.text
         html = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.IGNORECASE)
@@ -127,7 +195,51 @@ def fetch_page_text(url: str, max_chars: int = PAGE_FETCH_MAX_CHARS) -> Optional
         text = re.sub(r"\s+", " ", text).strip()
         return text[:max_chars] if text else None
     except Exception:
+        log.info(f"  [읽기실패] {url}")
         return None
+
+
+def fetch_page_text(url: str, max_chars: int = PAGE_FETCH_MAX_CHARS) -> Optional[str]:
+    """스니펫 대신 쓸 수 있도록 페이지 실제 본문 텍스트를 가져온다. 실패하면 None을 반환해
+    호출부가 스니펫으로 폴백할 수 있게 한다(네트워크 오류·404·PDF 등 어떤 이유로든 실패를
+    전체 파이프라인이 멈추는 원인으로 만들지 않기 위함).
+
+    2026-07-28 — 2단 구조로 바뀌었다.
+
+        ① 정규식 간이 추출(무료)
+        ② ①이 실패했거나 결과가 PAGE_FETCH_MIN_USEFUL_CHARS 미만이면 Tavily Extract
+
+    ②를 넣은 이유는 파이프라인 18절 "심층조사 가격 정보 전멸"이다. 가격이 JS로
+    렌더링되는 페이지에서 ①은 빈 문자열이나 네비게이션 텍스트만 건진다.
+
+    ②까지 실패해도 ①이 짧게라도 건진 게 있으면 그걸 쓴다 — 없는 것보다는 낫고,
+    후단 청크 필터(agents/verification.py)가 무관한 내용은 어차피 걸러낸다."""
+    direct = _fetch_page_text_direct(url, max_chars)
+
+    if direct and len(direct) >= PAGE_FETCH_MIN_USEFUL_CHARS:
+        log.info(
+            f"  [본문읽기] {url} ({len(direct)}자)",
+            extra={"kind": "fetch", "url": url, "count": len(direct)},
+        )
+        return direct
+
+    extracted = _extract_tavily(url, max_chars)
+    if extracted:
+        log.info(
+            f"  [본문읽기·Tavily] {url} ({len(extracted)}자)",
+            extra={"kind": "fetch", "url": url, "count": len(extracted)},
+        )
+        return extracted
+
+    if direct:
+        log.info(
+            f"  [본문읽기·짧음] {url} ({len(direct)}자)",
+            extra={"kind": "fetch", "url": url, "count": len(direct)},
+        )
+        return direct
+
+    log.info(f"  [본문없음] {url}", extra={"kind": "fetch_failed", "url": url})
+    return None
 
 
 # CRAG(arXiv 2401.15884)의 decompose-then-recompose 아이디어를 적용하기 위한 청크 분해 유틸.
@@ -158,32 +270,39 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
     return chunks
 
 
-def _search_brave(query: str, max_results: int) -> list[dict]:
-    """Brave Search API로 보조 검색을 수행한다. API 키가 없거나 호출이 실패하면 빈 리스트를
-    반환해 호출부(search_web)가 ddgs 결과만으로 계속 진행할 수 있게 한다(fetch_page_text()/
-    search_web()의 ddgs 호출과 같은 "실패를 흡수한다" 원칙)."""
-    api_key = os.getenv("BRAVE_API_KEY")
+def _search_tavily(query: str, max_results: int) -> list[dict]:
+    """Tavily Search로 보조 검색을 수행한다. ddgs 결과가 부족할 때만 부족한 만큼 호출된다.
+
+    API 키가 없거나 호출이 실패하면 빈 리스트를 반환해 호출부(search_web)가 ddgs 결과만으로
+    계속 진행하게 한다 — 2026-07-23에 Brave로 세웠던 것과 같은 계약이다. 다만 Brave와 달리
+    이쪽은 실제로 키가 있어 동작한다.
+
+    search_depth는 "basic"(1크레딧)을 쓴다. "advanced"는 2크레딧인데, 여기서 필요한 것은
+    후보 URL 목록이지 정제된 본문이 아니다 — 본문은 추출 계층이 따로 가져온다."""
+    api_key = _tavily_api_key()
     if not api_key:
         return []
     try:
-        resp = requests.get(
-            BRAVE_SEARCH_ENDPOINT,
-            params={"q": query, "count": max_results},
-            headers={
-                "Accept": "application/json",
-                "X-Subscription-Token": api_key,
+        resp = requests.post(
+            TAVILY_SEARCH_ENDPOINT,
+            json={
+                "query": query,
+                "max_results": max_results,
+                "search_depth": "basic",
             },
-            timeout=BRAVE_FETCH_TIMEOUT,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=TAVILY_TIMEOUT,
         )
         if resp.status_code != 200:
-            print(f"  [Brave 검색 실패] '{query}' — HTTP {resp.status_code}, ddgs 결과만 사용")
+            log.info(f"  [Tavily 검색 실패] '{query}' — HTTP {resp.status_code}, ddgs 결과만 사용")
             return []
-        data = resp.json()
-        web_results = (data.get("web") or {}).get("results") or []
+        data = resp.json() or {}
         results = []
-        for r in web_results[:max_results]:
+        for r in (data.get("results") or [])[:max_results]:
             url = r.get("url", "")
-            snippet = r.get("description", "")
+            if not url:
+                continue
+            snippet = r.get("content", "") or ""
             results.append(
                 {
                     "title": r.get("title", ""),
@@ -195,7 +314,9 @@ def _search_brave(query: str, max_results: int) -> list[dict]:
             )
         return results
     except Exception as e:
-        print(f"  [Brave 검색 실패] '{query}' 검색 중 오류 발생({type(e).__name__}: {e}) — ddgs 결과만 사용")
+        log.info(
+            f"  [Tavily 검색 실패] '{query}' 검색 중 오류 발생({type(e).__name__}: {e}) — ddgs 결과만 사용"
+        )
         return []
 
 
@@ -214,11 +335,15 @@ def search_web(query: str, max_results: int = 5, fetch_full_text: bool = False) 
     "실패 시 None 반환"으로 흡수하는 것과 같은 원칙으로, 여기서도 검색 자체의 실패를
     빈 리스트로 흡수해 호출부(재시도 로직, 정상 흐름)가 계속 진행되게 한다.
 
-    2026-07-23 추가(다중 검색 백엔드, 파이프라인 문서 32절): ddgs 결과가 max_results에
-    못 미치면(빈 리스트 포함) Brave Search API로 부족한 만큼만 보완한다. ddgs가 아예
-    실패해도(예외 발생) 빈 결과로 간주하고 Brave 보완을 계속 시도한다 — 한쪽 백엔드가
-    죽어도 다른 쪽으로 recall을 최대한 지키려는 목적. BRAVE_API_KEY가 없으면
-    `_search_brave()`가 빈 리스트를 반환하므로 기존 ddgs-only 동작과 동일하게 유지된다.
+    다중 검색 백엔드(파이프라인 문서 32절): ddgs 결과가 max_results에 못 미치면
+    (빈 리스트 포함) Tavily Search로 부족한 만큼만 보완한다. ddgs가 아예 실패해도
+    (예외 발생) 빈 결과로 간주하고 Tavily 보완을 계속 시도한다 — 한쪽 백엔드가 죽어도
+    다른 쪽으로 recall을 최대한 지키려는 목적.
+
+    2026-07-28 — 보조 백엔드를 Brave에서 Tavily로 바꿨다. Brave는 키를 넣은 적이 없어
+    한 번도 실행되지 않았고(즉 폴백이 사실상 없었다), 2026년 2월부로 무료 티어도
+    없어졌다. TAVILY_API_KEY가 없으면 `_search_tavily()`가 빈 리스트를 반환하므로
+    기존 ddgs-only 동작과 동일하게 유지되는 계약은 그대로다.
     """
     results: list[dict] = []
     seen_urls: set[str] = set()
@@ -245,13 +370,22 @@ def search_web(query: str, max_results: int = 5, fetch_full_text: bool = False) 
                         "source_tier": classify_source_tier(url).value,
                     }
                 )
+                log.info(
+                    f"  [검색결과] {r.get('title', '')[:60]}",
+                    extra={
+                        "kind": "search_result",
+                        "url": url,
+                        "tier": classify_source_tier(url).value,
+                        "title": r.get("title", ""),
+                    },
+                )
     except Exception as e:
-        print(f"  [ddgs 검색 실패] '{query}' 검색 중 오류 발생({type(e).__name__}: {e}) — Brave 백엔드로 계속 진행합니다.")
+        log.info(f"  [ddgs 검색 실패] '{query}' 검색 중 오류 발생({type(e).__name__}: {e}) — Tavily 백엔드로 계속 진행합니다.")
 
     if len(results) < max_results:
         remaining = max_results - len(results)
-        brave_results = _search_brave(query, remaining)
-        for r in brave_results:
+        tavily_results = _search_tavily(query, remaining)
+        for r in tavily_results:
             if r["url"] in seen_urls:
                 continue
             seen_urls.add(r["url"])
@@ -260,8 +394,17 @@ def search_web(query: str, max_results: int = 5, fetch_full_text: bool = False) 
                 if page_text:
                     r = {**r, "content": page_text}
             results.append(r)
-        if brave_results:
-            print(f"  [Brave 보완] ddgs {max_results - remaining}건 + Brave {len(brave_results)}건")
+            log.info(
+                f"  [검색결과] {r.get('title', '')[:60]}",
+                extra={
+                    "kind": "search_result",
+                    "url": r["url"],
+                    "tier": r.get("source_tier", ""),
+                    "title": r.get("title", ""),
+                },
+            )
+        if tavily_results:
+            log.info(f"  [Tavily 보완] ddgs {max_results - remaining}건 + Tavily {len(tavily_results)}건")
 
     return results
 
@@ -269,8 +412,9 @@ def search_web(query: str, max_results: int = 5, fetch_full_text: bool = False) 
 if __name__ == "__main__":
     import sys
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     q = sys.argv[1] if len(sys.argv) > 1 else "웨어러블 헬스케어 기기 시장 규모"
     for r in search_web(q, max_results=5):
-        print(f"[{r['source_tier']}] {r['title']}")
-        print(f"  {r['url']}")
-        print(f"  {r['snippet'][:120]}...\n")
+        log.info(f"[{r['source_tier']}] {r['title']}")
+        log.info(f"  {r['url']}")
+        log.info(f"  {r['snippet'][:120]}...\n")

@@ -1,0 +1,37 @@
+# /etc/caddy/Caddyfile
+#
+# Caddy를 쓰는 이유: Let's Encrypt 인증서를 자동으로 받고 자동으로 갱신한다.
+# nginx + certbot 조합보다 설정이 짧고, 발표 전에 인증서 만료로 사고날 여지가 적다.
+#
+# {$SITE_ADDRESS} 는 /etc/caddy/caddy.env 에서 주입한다.
+# 도메인이 없으면 sslip.io를 쓴다 — 예: 34.64.10.20.sslip.io
+# (IP를 그대로 DNS 이름으로 되돌려주는 공개 서비스라 실제 인증서를 받을 수 있다.)
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# API는 로컬 uvicorn으로 넘긴다. 같은 오리진이므로 CORS가 필요 없다 —
+	# 프론트가 /api/... 를 상대경로로 부르면 끝난다.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000 {
+			# 그래프 실행은 백그라운드로 빠지므로 응답 자체는 빠르지만,
+			# DOCX 다운로드가 느릴 수 있어 여유를 둔다.
+			transport http {
+				read_timeout 120s
+			}
+		}
+	}
+
+	# 나머지는 정적 프론트엔드. SPA이므로 없는 경로는 index.html로 되돌린다
+	# (React Router의 /projects/:id 를 새로고침해도 404가 안 나게).
+	handle {
+		root * /opt/planner/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/access.log
+		format console
+	}
+}

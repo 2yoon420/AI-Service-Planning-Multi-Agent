@@ -1,0 +1,49 @@
+# /etc/systemd/system/planner-api.service
+#
+# 워커는 반드시 1개다. 두 가지 이유가 있고 둘 다 타협 불가다.
+#   ① EVENT_BUS가 프로세스 메모리 안에 있다 — 워커가 2개면 진행 이벤트가 반반씩
+#      갈라져 화면에 절반만 보인다.
+#   ② 그래프 실행이 백그라운드 스레드에서 HTTP 응답보다 5~30분 더 산다 —
+#      워커를 늘리면 어느 워커가 그 스레드를 들고 있는지 알 수 없다.
+[Unit]
+Description=AI 서비스 기획 보조 Multi-Agent API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=planner
+Group=planner
+WorkingDirectory=/opt/planner/app
+
+# 가변 데이터는 전부 영구 디스크로. 소스 트리(/opt/planner/app)와 분리해야
+# git pull이 수집한 fact를 덮지 않는다(paths.py 상단 주석 참고).
+Environment=DATA_DIR=/mnt/data
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/planner/planner.env
+
+ExecStart=/opt/planner/venv/bin/uvicorn api.main:app \
+    --host 127.0.0.1 --port 8000 --workers 1
+
+# 죽으면 되살리되, 계속 죽으면 포기하고 알람이 보이게 둔다.
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+# 30분 넘게 도는 그래프가 있으므로 종료 유예를 넉넉히 준다.
+TimeoutStopSec=60
+
+# 최소 권한
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/mnt/data
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=planner-api
+
+[Install]
+WantedBy=multi-user.target

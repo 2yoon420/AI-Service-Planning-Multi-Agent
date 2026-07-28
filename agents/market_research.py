@@ -24,6 +24,10 @@ from agents.web_search import chunk_text, search_web
 from fact_store.schema import Fact, MarketSizing, SourceTier
 from fact_store.store import init_db, save_fact_if_new, save_market_sizing
 
+import logging
+
+log = logging.getLogger(__name__)
+
 load_dotenv()
 
 HEAVY_MODEL = os.getenv("HEAVY_MODEL", "solar-pro2")
@@ -437,7 +441,7 @@ def _search_extract_and_save(
     전체가 끝난 뒤 한 배치로 묶어 검증한다 — MAIN-RAG의 적응형 임계값 계산이
     배치 단위 점수 분포를 필요로 하기 때문이다."""
     results = search_web(query, max_results=results_per_question, fetch_full_text=True)
-    print(f"  검색결과 {len(results)}건")
+    log.info(f"  검색결과 {len(results)}건")
 
     n_facts_this_query = 0
     newly_saved_with_content: list[tuple[Fact, str]] = []
@@ -446,7 +450,7 @@ def _search_extract_and_save(
         chunks = chunk_text(raw_content)
         filtered_content = filter_relevant_chunks(client, chunks, topic, target_market, query)
         if not filtered_content:
-            print(f"  [청크필터] 관련 청크 없음 — 건너뜀: {result['url']}")
+            log.info(f"  [청크필터] 관련 청크 없음 — 건너뜀: {result['url']}")
             continue
         result = {**result, "content": filtered_content}
 
@@ -465,15 +469,22 @@ def _search_extract_and_save(
             all_facts.append(stored_fact)
             n_facts_this_query += 1
             if is_new:
-                print(f"  [fact 저장] ({stored_fact.source_tier.value}) {text}")
+                log.info(
+                    f"  [fact 저장] ({stored_fact.source_tier.value}) {text}",
+                    extra={
+                        "kind": "fact",
+                        "url": stored_fact.source_url,
+                        "tier": stored_fact.source_tier.value,
+                    },
+                )
                 counters["n_saved"] += 1
                 newly_saved_with_content.append((stored_fact, filtered_content))
             else:
-                print(f"  [중복 건너뜀 — 기존 {stored_fact.id}와 유사] {text}")
+                log.info(f"  [중복 건너뜀 — 기존 {stored_fact.id}와 유사] {text}")
                 counters["n_duplicates"] += 1
 
     if newly_saved_with_content:
-        print(f"  [검증] 신규 fact {len(newly_saved_with_content)}개 배치 검증 중...")
+        log.info(f"  [검증] 신규 fact {len(newly_saved_with_content)}개 배치 검증 중...")
         verify_facts_batch(client, newly_saved_with_content, topic, target_market)
 
     return n_facts_this_query
@@ -503,19 +514,19 @@ def run_targeted_research(
 
     all_facts: list[Fact] = []
     counters = {"n_saved": 0, "n_duplicates": 0}
-    print(f"[시장조사 에이전트-타겟검색] '{focus_query}' 검색 중...")
+    log.info(f"[시장조사 에이전트-타겟검색] '{focus_query}' 검색 중...")
     n_found = _search_extract_and_save(
         client, focus_query, topic, target_market, results_per_question, all_facts, counters
     )
 
     if n_found == 0:
         retry_query = simplify_query(client, focus_query)
-        print(f"  [재시도] 이 질의에서 fact를 못 찾음 → 더 일반적인 검색어로 재검색: {retry_query}")
+        log.info(f"  [재시도] 이 질의에서 fact를 못 찾음 → 더 일반적인 검색어로 재검색: {retry_query}")
         _search_extract_and_save(
             client, retry_query, topic, target_market, results_per_question, all_facts, counters
         )
 
-    print(f"[시장조사 에이전트-타겟검색] fact {counters['n_saved']}개 신규 저장, "
+    log.info(f"[시장조사 에이전트-타겟검색] fact {counters['n_saved']}개 신규 저장, "
           f"중복 {counters['n_duplicates']}개 건너뜀 (관련 fact 총 {len(all_facts)}개)")
     return all_facts
 
@@ -537,42 +548,42 @@ def run_market_research(
     init_db()
     client = get_client()
 
-    print(f"[시장조사 에이전트] 연구대상: {topic} / 목표시장: {target_market}")
+    log.info(f"[시장조사 에이전트] 연구대상: {topic} / 목표시장: {target_market}")
     questions = generate_research_questions(client, topic, target_market, n=n_questions)
-    print(f"[시장조사 에이전트] 리서치 질문 {len(questions)}개 생성:")
+    log.info(f"[시장조사 에이전트] 리서치 질문 {len(questions)}개 생성:")
     for q in questions:
-        print(f"  - {q}")
+        log.info(f"  - {q}")
 
     all_facts: list[Fact] = []
     counters = {"n_saved": 0, "n_duplicates": 0}
     for question in questions:
-        print(f"\n[검색] {question}")
+        log.info(f"\n[검색] {question}")
         n_this_q = _search_extract_and_save(
             client, question, topic, target_market, results_per_question, all_facts, counters
         )
 
         if n_this_q == 0:
             retry_query = simplify_query(client, question)
-            print(f"  [재시도] 이 질문에서 fact를 못 찾음 → 더 일반적인 검색어로 재검색: {retry_query}")
+            log.info(f"  [재시도] 이 질문에서 fact를 못 찾음 → 더 일반적인 검색어로 재검색: {retry_query}")
             _search_extract_and_save(
                 client, retry_query, topic, target_market, results_per_question, all_facts, counters
             )
 
-    print(f"\n[시장조사 에이전트] fact {counters['n_saved']}개 신규 저장, 중복 {counters['n_duplicates']}개 건너뜀 "
+    log.info(f"\n[시장조사 에이전트] fact {counters['n_saved']}개 신규 저장, 중복 {counters['n_duplicates']}개 건너뜀 "
           f"(관련 fact 총 {len(all_facts)}개)")
 
-    print("\n[시장조사 에이전트] TAM/SAM/SOM 계산 중...")
+    log.info("\n[시장조사 에이전트] TAM/SAM/SOM 계산 중...")
     sizing = calculate_market_sizing(client, topic, target_market, all_facts, bottom_up_inputs)
-    print(f"  TAM(Top-down): {sizing.tam_topdown:,.0f} {sizing.unit}" if sizing.tam_topdown else "  TAM(Top-down): 계산 불가")
-    print(f"  SAM(Top-down): {sizing.sam_topdown:,.0f} {sizing.unit}" if sizing.sam_topdown else "  SAM(Top-down): 계산 불가")
-    print(f"  SOM(Top-down): {sizing.som_topdown:,.0f} {sizing.unit}" if sizing.som_topdown else "  SOM(Top-down): 계산 불가")
+    log.info(f"  TAM(Top-down): {sizing.tam_topdown:,.0f} {sizing.unit}" if sizing.tam_topdown else "  TAM(Top-down): 계산 불가")
+    log.info(f"  SAM(Top-down): {sizing.sam_topdown:,.0f} {sizing.unit}" if sizing.sam_topdown else "  SAM(Top-down): 계산 불가")
+    log.info(f"  SOM(Top-down): {sizing.som_topdown:,.0f} {sizing.unit}" if sizing.som_topdown else "  SOM(Top-down): 계산 불가")
     if sizing.som_bottomup:
-        print(f"  SOM(Bottom-up): {sizing.som_bottomup:,.0f} {sizing.unit}")
+        log.info(f"  SOM(Bottom-up): {sizing.som_bottomup:,.0f} {sizing.unit}")
     if sizing.discrepancy_flag:
-        print("  ⚠️ Top-down/Bottom-up 10배 이상 차이 — 가정치 재검토 필요")
-    print("  가정 및 근거:")
+        log.info("  ⚠️ Top-down/Bottom-up 10배 이상 차이 — 가정치 재검토 필요")
+    log.info("  가정 및 근거:")
     for a in sizing.assumptions:
-        print(f"    - {a}")
+        log.info(f"    - {a}")
 
     return all_facts, sizing
 

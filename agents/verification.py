@@ -44,6 +44,10 @@ from fact_store.schema import Fact, VerificationStatus
 from fact_store.store import save_fact
 from rag.query import search_corpus
 
+import logging
+
+log = logging.getLogger(__name__)
+
 VERIFICATION_MODEL = os.getenv("LIGHT_MODEL", "solar-mini")
 
 CHUNK_RELEVANCE_SCHEMA = {
@@ -258,7 +262,7 @@ def verify_facts_batch(
         graded.append((fact, source_content, combined, reasoning))
 
     threshold = compute_adaptive_threshold([s for _, _, s, _ in graded])
-    print(f"  [검증] 이번 배치 적응형 임계값: {threshold:.2f}점 (fact {len(graded)}개 채점 완료)")
+    log.info(f"  [검증] 이번 배치 적응형 임계값: {threshold:.2f}점 (fact {len(graded)}개 채점 완료)")
 
     counts = {"accepted": 0, "ambiguous": 0, "rejected": 0}
     for fact, source_content, combined, reasoning in graded:
@@ -280,8 +284,8 @@ def verify_facts_batch(
         save_fact(fact)
 
         if status != VerificationStatus.ACCEPTED:
-            print(f"  [검증:{status.value}] ({combined}점) {fact.text[:60]}")
-            print(f"    사유: {reasoning}")
+            log.info(f"  [검증:{status.value}] ({combined}점) {fact.text[:60]}")
+            log.info(f"    사유: {reasoning}")
 
     return counts
 
@@ -315,7 +319,7 @@ def get_methodology_citation(query: str, doc_type: Optional[str] = None, k: int 
     try:
         hits = search_corpus(query, k=k, doc_type=doc_type)
     except Exception as e:
-        print(f"  [방법론 근거 조회 실패] '{query}' 조회 중 오류({type(e).__name__}: {e}) — 근거 없이 진행합니다.")
+        log.info(f"  [방법론 근거 조회 실패] '{query}' 조회 중 오류({type(e).__name__}: {e}) — 근거 없이 진행합니다.")
         return []
 
     return [
