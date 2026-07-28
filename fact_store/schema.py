@@ -61,6 +61,7 @@ class Fact(BaseModel):
     published_date: Optional[date] = Field(None, description="원자료 발행일")
     retrieved_date: date = Field(..., description="수집(조회)일 - 출처 메타데이터 필수 항목")
     region: Optional[str] = Field(None, description="관련 지역 (예: 국내, 북미, 유럽)")
+    # source_excerpt는 아래 검증 필드들과 함께 채워진다. 왜 필요했는지는 그 필드 주석 참고.
     topic_relevance: Optional[str] = Field(None, description="이 fact가 어떤 리서치 질문에 답하는지")
     topic: Optional[str] = Field(
         None,
@@ -97,6 +98,14 @@ class Fact(BaseModel):
     )
     verification_reasoning: Optional[str] = Field(
         None, description="검증 에이전트가 이 판정을 내린 근거 요약 (사람이 재확인할 때 참고용)"
+    )
+    source_excerpt: Optional[str] = Field(
+        None,
+        description=(
+            "근거지지도 채점기에 실제로 제시된 원문 조각 (2026-07-29 추가). "
+            "원문 전체가 아니라 build_grading_prompt()가 넘기는 source_content[:3000]와 "
+            "동일한 문자열이다."
+        ),
     )
 
 

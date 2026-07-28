@@ -16,8 +16,11 @@
        Self-RAG의 ISSUP 개념을 프롬프트 관점으로 차용)
      - 같은 모델(Solar Mini)에 관점만 다른 프롬프트를 줘서 독립적인 두 판단을 얻고,
        보수적으로 결합(min)한다.
-     - 임계값은 고정 숫자가 아니라, 이번 배치(한 번의 실행)에서 나온 점수 분포를 보고
-       동적으로 정한다(MAIN-RAG의 adaptive filtering threshold).
+     - 판정 경계는 이산 규칙으로 고정돼 있다: 채택 ≥4 / 애매 =3 / 기각 ≤2.
+       2026-07-29까지는 배치 점수 분포로 임계값을 동적으로 정했으나(MAIN-RAG의
+       adaptive filtering), 정수 척도에서 그 방식이 "3점을 채택하는가"라는 이진
+       스위치로 퇴화한다는 것을 4도메인 471쌍으로 실측해 전환했다. 전환 근거
+       전체는 classify_score() 위 주석에 있다.
 
   3) 방법론 근거 조회 (RAG 코퍼스 연결, 파이프라인 문서 19절)
      - 1)·2)는 "이 fact가 사실로서 맞는가"를 검증하지만, 이 3)은 성격이 다르다 —
@@ -247,6 +250,17 @@ PERSPECTIVE_INPUT_KEYS: dict[Perspective, tuple[str, ...]] = {
 
 SCORE_MIN, SCORE_MAX = 1, 5
 
+# 근거지지도 채점기에 넘기는 원문 길이 상한 (2026-07-29 상수화).
+#
+# 왜 상수로 뺐는가: 이 길이가 두 곳에서 쓰인다 — 프롬프트에 넣을 때, 그리고
+# fact.source_excerpt에 저장할 때. 두 값이 어긋나면 "심판이 본 것"과 "저장된 것"이
+# 달라지고, 나중에 사람이 그 excerpt로 근거지지도를 라벨할 때 심판보다 많거나 적은
+# 정보를 보게 되어 정렬도가 왜곡된다. 한 곳에서만 정의해 어긋날 수 없게 한다.
+#
+# 3000자라는 값 자체는 근거 없는 임의값이다(등급 C). 토큰 비용과 컨텍스트 한계를
+# 감안한 초기 설정이며, 이 길이 뒤에 근거가 있는 fact는 심판이 원래도 보지 못했다.
+SOURCE_EXCERPT_CHARS = 3000
+
 
 def clamp_score(score: int, perspective: Perspective) -> int:
     """채점 점수를 1~5로 강제한다 (2026-07-28 추가).
@@ -254,9 +268,13 @@ def clamp_score(score: int, perspective: Perspective) -> int:
     원인: GRADE_SCHEMA에 minimum/maximum이 없던 동안 solar-pro3가 self-test에서
       0점을 반환한 것이 관측됐다(R-NG-5, [0, 5, 5]). 구조화 출력 스키마는 공급자·모델에
       따라 강제 수준이 다르므로 스키마만 믿을 수 없다.
-    왜 위험한가: compute_adaptive_threshold()가 배치의 평균과 표준편차로 임계값을
-      정하기 때문에, 범위 밖 점수 한 건이 평균을 끌어내리고 표준편차를 키워 임계값을
-      두 방향에서 낮춘다. 즉 한 건의 계약 위반이 그 배치 전체를 관대하게 만든다.
+    왜 위험했는가: 당시 판정은 compute_adaptive_threshold()가 배치의 평균과 표준편차로
+      임계값을 정했다. 범위 밖 점수 한 건이 평균을 끌어내리고 표준편차를 키워 임계값을
+      두 방향에서 낮췄다. 즉 한 건의 계약 위반이 그 배치 전체를 관대하게 만들었다.
+    지금은: 2026-07-29 이산 규칙 전환으로 판정이 배치 분포를 보지 않으므로, 이
+      전파 경로 자체가 사라졌다. 그래도 이 함수는 남긴다 — 범위 밖 점수는 판정
+      경계와 무관하게 그 fact 하나의 판정을 여전히 망치고(0점이면 기각), 계약 위반을
+      조용히 넘기지 않는 것이 이 함수의 본래 목적이기 때문이다.
     한계: clamp는 잘못된 점수를 "가장 가까운 유효값"으로 바꾸는 것이므로 원래 의도를
       복원하지는 못한다. 그래서 조용히 넘기지 않고 경고 로그를 남긴다.
     """
@@ -293,7 +311,7 @@ def build_grading_prompt(
         blocks.append(f"연구대상: {topic}\n목표시장: {target_market}")
         blocks.append(f"이 fact가 다루는 지역: {region or '불명'}")
     if "source_content" in keys:
-        body = source_content[:3000] or "(원본 본문 없음)"
+        body = source_content[:SOURCE_EXCERPT_CHARS] or "(원본 본문 없음)"
         blocks.append(f"원본 본문(이 fact를 추출한 출처):\n{body}")
     blocks.append(f'채점 대상 fact:\n"{fact_text}"')
     blocks.append("위 기준에 따라 1~5점을 매기세요.")
@@ -399,12 +417,123 @@ def token_usage_report() -> str:
     return " | ".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# 판정 경계 — 이산 규칙 (2026-07-29 전환)
+#
+# ## 무엇을 바꿨는가
+#
+#   이전: threshold = mean − 0.5×stdev, 그 값을 clamp(3.0, 4.0)
+#         채택: 점수 ≥ threshold / 기각: 점수 ≤ threshold − 2 / 나머지 애매
+#   이후: 채택 ≥ 4 / 애매 = 3 / 기각 ≤ 2   (고정, 배치 분포와 무관)
+#
+# ## 왜 바꿨는가 — 근거 셋
+#
+# ### ① 내부 정합성 (연역)
+#   우리 루브릭이 3점을 "부분적으로만 관련"으로 정의한다(GRADE_SCHEMA·아래 프롬프트).
+#   부분적으로만 관련된 것에 "검증 통과" 도장을 찍는 것은 루브릭 자기모순이다.
+#   이 근거는 외부 자료 없이 성립하며, tests/test_verification_grading.py가 루브릭
+#   계약으로 지키고 있다.
+#
+# ### ② 실측 (eval/agreement.py, 재현 가능)
+#   사람 라벨 70건 중 검증기가 관련성 3점을 준 30건을 사람은 이렇게 봤다.
+#       ≥4점(채택 상당) 15건(50%) / 3점 2건(7%) / ≤2점(기각 상당) 13건(43%)
+#   절반씩 갈렸다. 3점을 자동 채택하면 43%가 잘못 실리고, 자동 기각하면 50%를 잃는다.
+#   → 어느 쪽으로도 자동 처리할 수 없다. 3점은 사람이 봐야 한다.
+#   (`python eval/agreement.py` 로 재현. 2026-07-29 실기기 확인 완료)
+#
+# ### ③ 실측 (eval/sensitivity.py, 재현 가능)
+#   4도메인 471쌍에서 clamp 하한을 3.0→3.1로 0.1만 올리면 채택률이 6.1~24.6%p 움직였다.
+#   판정 파라미터 중 가장 민감했다. 정수 척도(1~5)에서 임계값 3.0과 3.001은
+#   "3점을 채택하는가"라는 이진 스위치로 퇴화한다 — 연속값의 외형만 갖고 있었다.
+#   (`python eval/sensitivity.py --batch-size 5` 로 재현. 배치 5 조건 필수)
+#
+# ### ④ 외부 근거 — 구조에 한해서
+#   Chow(1970), "On optimum recognition error and reject tradeoff",
+#   IEEE Trans. Information Theory 16(1):41-46.
+#   오류율과 기각률이 상충하며, 확신이 임계값 미만일 때 판단을 보류(reject option)하는
+#   것이 최적이라는 것을 증명한 원전이다. 우리 3단계 판정이 이 구조에 대응한다.
+#       채택 = positive / 기각 = negative / 애매 = reject option(사람에게 위임)
+#   2026년에도 selective classification·learning-to-defer 계열로 이어지고 있다.
+#
+#   ★ 한계: Chow의 정리는 참 사후확률을 알 때만 최적을 보장한다. 우리 1~5점은
+#     LLM이 매긴 눈금이고 보정된 확률이 아니다. 따라서 "4와 2가 최적 경계"는
+#     논문으로 뒷받침되지 않는다. 논문은 "기각 구간을 두어라"까지만 지지하고,
+#     경계값 자체는 위 ①②에서 나온다. 이 구분을 흐리지 말 것.
+#
+# ## 무엇을 잃었는가 (정직하게)
+#
+#   MAIN-RAG(arXiv:2501.00332)의 adaptive filtering 인용을 잃는다. 다만 그 인용이
+#   보장한 것은 "평균 − k×표준편차" 라는 공식 형태뿐이었고, 계수 0.5와 clamp 3~4는
+#   처음부터 자체 설계(등급 C)였다. 그리고 위 ③이 그 아이디어가 정수 척도에서
+#   퇴화함을 실측했다. 즉 논문을 버리는 것이 아니라 "적용해봤더니 우리 척도에서는
+#   작동하지 않음을 재서 확인한" 것으로 보고한다.
+#
+# ## 무엇을 얻었는가
+#
+#   1) 근거 없는 값이 4개 → 1개.
+#      (계수 0.5 · clamp 하한 3.0 · clamp 상한 4.0 · 기각 경계 −2) → (경계 4/3/2 묶음)
+#      남은 1개는 루브릭 정의에 묶여 있어 임의로 흔들 수 없다.
+#   2) 결함 D의 경로가 원리적으로 사라진다. 임계값이 배치 분포에 의존하지 않으므로
+#      범위 밖 점수 한 건이 배치 전체를 오염시킬 통로 자체가 없어진다.
+#   3) 판정이 배치 구성에 따라 달라지지 않는다 — 같은 fact가 언제 검색됐는지에 따라
+#      다르게 판정되던 재현성 문제가 함께 해결된다.
+#
+# ## 대가 (4도메인 471쌍 실측)
+#
+#   채택 332 → 254건 (−78건, −16.6%p / 채택률 70.5% → 53.9%)
+#   애매 113 → 187건 (+74건) — 사람이 확인할 양이 65% 늘어난다
+#   기각  26 →  30건 (+4건)
+#   유럽 포장재가 가장 크게 바뀐다(채택 128→83, 애매 40→83).
+#   기획서는 그만큼 보수적이 되고 [출처확인필요] 태그가 늘어난다. 의도한 대가다.
+# ---------------------------------------------------------------------------
+
+ACCEPT_MIN_SCORE = 4   # 이 점수 이상이면 채택. 루브릭상 4점 = "직접 관련"
+REJECT_MAX_SCORE = 2   # 이 점수 이하면 기각. 루브릭상 2점 = "무관 또는 규칙 위반"
+                       # 사이값(=3, "부분적으로만 관련")은 애매 — 사람이 확인해야 한다
+
+
+def make_source_excerpt(source_content: str) -> Optional[str]:
+    """근거지지도 채점기에 제시된 것과 **동일한** 원문 조각을 만든다.
+
+    저장 목적: 원문을 남기지 않아서 다음 세 가지가 막혀 있었다.
+      · 근거지지도 재채점 (모델·루브릭을 바꾼 뒤 같은 표본을 다시 채점)
+      · 근거지지도 사람 라벨 (검증 총정리 한계 ①, 3차 검토 4순위)
+      · 결함 수정 전후 같은 표본 비교 (한계 ⑨)
+
+    원문 전체가 아니라 잘린 조각을 저장하는 이유: 사람이 이 excerpt를 보고 라벨할 때
+    심판과 같은 정보를 봐야 한다. 전체를 저장하면 사람이 더 많이 보게 되어 "사람이
+    맞고 기계가 틀렸다"가 정보량 차이 때문인지 판단력 차이 때문인지 구분되지 않는다.
+    """
+    if not source_content:
+        return None
+    return source_content[:SOURCE_EXCERPT_CHARS]
+
+
+def classify_score(score: int) -> VerificationStatus:
+    """결합 점수 하나를 3단계 판정으로 옮긴다. 배치 분포를 보지 않는다.
+
+    위 주석의 근거 ①~④에 따른 이산 규칙이다. 이 함수가 판정의 유일한 출처이므로,
+    판정 기준을 바꿀 일이 생기면 여기만 고치면 된다(이전 구현은 verify_fact과
+    verify_facts_batch 두 곳에 같은 비교식이 중복돼 있었다)."""
+    if score >= ACCEPT_MIN_SCORE:
+        return VerificationStatus.ACCEPTED
+    if score <= REJECT_MAX_SCORE:
+        return VerificationStatus.REJECTED
+    return VerificationStatus.AMBIGUOUS
+
+
 def compute_adaptive_threshold(scores: list[int]) -> float:
-    """MAIN-RAG의 adaptive filtering 아이디어: 고정 임계값 대신 이번 배치의 점수 분포를 보고
-    동적으로 임계값을 정한다. 평균이 낮은 배치(원래 검색 품질이 나쁜 topic)에서는 임계값을
-    낮춰 recall을 지키고, 평균이 높은 배치에서는 임계값을 높여 precision을 더 타이트하게
-    가져간다. 다만 3~4점 범위를 벗어나지 않도록 clamp해, 너무 관대하거나 너무 엄격해지는
-    극단을 막는다 (완전히 배치에만 의존하면 배치 자체가 나쁠 때 전부 통과시켜버릴 위험이 있음)."""
+    """[폐기됨 — 2026-07-29] 배치 분포 기반 적응형 임계값.
+
+    운영 경로에서는 더 이상 호출되지 않는다. 판정은 classify_score()가 한다.
+    삭제하지 않고 남겨두는 이유는 두 가지다.
+
+      1) eval/sensitivity.py가 "이전 규칙 대비 무엇이 달라졌는가"를 계산할 때
+         이 식이 기준선으로 필요하다. 지우면 전후 비교를 재현할 수 없다.
+      2) 이 식이 정수 척도에서 이진 스위치로 퇴화한다는 것이 이번 라운드의
+         실측 결과다. 코드에서 지워버리면 그 발견의 대상이 사라진다.
+
+    새 코드에서 이 함수를 판정에 쓰지 말 것."""
     if not scores:
         return 4.0
     mean = statistics.mean(scores)
@@ -419,10 +548,15 @@ def verify_fact(
     source_content: str,
     topic: str,
     target_market: str,
-    threshold: float,
 ) -> Fact:
-    """fact 하나를 관련성·근거지지도 두 관점으로 채점하고, 보수적 결합(min) 점수와
-    주어진 임계값을 비교해 최종 판정을 내린 뒤 Fact 객체에 반영한다 (저장은 호출부 책임)."""
+    """fact 하나를 관련성·근거지지도 두 관점으로 채점하고, 보수적 결합(min) 점수를
+    이산 규칙으로 판정해 Fact 객체에 반영한다 (저장은 호출부 책임).
+
+    2026-07-29 변경: `threshold: float` 파라미터를 제거했다. 이산 규칙 전환으로
+    쓰이지 않게 됐는데, 인자를 남겨두고 조용히 무시하면 호출부는 자기가 넘긴 값이
+    반영된다고 믿는다. 이 프로젝트는 "고친 함수가 실제로 호출되는지 확인하지 않은"
+    유형의 실수를 이미 세 번 겪었다(검증 총정리 5절 변조실험). 그래서 무시하는 대신
+    제거해, 옛 호출부가 남아 있으면 TypeError로 즉시 드러나게 한다."""
     # LLM에 묻기 전에 코드로 확실히 판정할 수 있는 것을 먼저 처리한다(결함 F).
     blocked = prescreen_fact(fact.text, source_content)
     if blocked:
@@ -431,6 +565,8 @@ def verify_fact(
         fact.verification_reasoning = f"[사전검사 기각] {blocked}"
         fact.citation_verified = False
         fact.needs_source_check = True
+        # 사전기각분도 원문을 남긴다 — 왜 모지바케로 판정됐는지 나중에 확인해야 한다.
+        fact.source_excerpt = make_source_excerpt(source_content)
         log.info(f"  [검증] 사전검사 기각: {fact.text[:40]}… — {blocked[:36]}…")
         return fact
 
@@ -441,18 +577,14 @@ def verify_fact(
     combined = min(rel_score, grd_score)
     reasoning = f"[관련성 {rel_score}점: {rel_reason}] [근거지지도 {grd_score}점: {grd_reason}]"
 
-    if combined >= threshold:
-        status = VerificationStatus.ACCEPTED
-    elif combined <= threshold - 2:
-        status = VerificationStatus.REJECTED
-    else:
-        status = VerificationStatus.AMBIGUOUS
+    status = classify_score(combined)
 
     fact.verification_score = combined
     fact.verification_status = status
     fact.verification_reasoning = reasoning
     fact.citation_verified = status == VerificationStatus.ACCEPTED
     fact.needs_source_check = status != VerificationStatus.ACCEPTED
+    fact.source_excerpt = make_source_excerpt(source_content)
     return fact
 
 
@@ -481,11 +613,15 @@ def verify_facts_batch(
     # 사전검사에서 기각된 fact는 배치 점수 분포에 넣지 않는다(결함 F).
     # 넣으면 최저점이 평균을 끌어내려 임계값이 낮아지고, 결함 D와 같은 방식으로
     # 나머지 fact 전체가 관대하게 판정된다 — 오염이 전파되지 않게 분리한다.
-    prescreened: list[tuple[Fact, str]] = []
+    # (fact, 기각사유, 원문조각) — excerpt를 여기서 함께 들고 다니지 않으면 저장 루프에
+    # 도달했을 때 source_content가 이미 스코프 밖이다. 초기 구현이 reasoning을 버려서
+    # 진단이 불가능했던 것과 같은 실수를 반복하지 않는다.
+    prescreened: list[tuple[Fact, str, Optional[str]]] = []
     for fact, source_content in facts_with_content:
         blocked = prescreen_fact(fact.text, source_content)
         if blocked:
-            prescreened.append((fact, f"[사전검사 기각] {blocked}"))
+            prescreened.append((fact, f"[사전검사 기각] {blocked}",
+                                make_source_excerpt(source_content)))
             continue
         rel_score, rel_reason = grade_fact(client, fact.text, source_content, topic,
                                                    target_market, "relevance", fact.region)
@@ -497,34 +633,37 @@ def verify_facts_batch(
     if prescreened:
         log.info(f"  [검증] 사전검사로 {len(prescreened)}건 기각 (LLM 호출 없음)")
 
-    threshold = compute_adaptive_threshold([s for _, _, s, _ in graded])
-    log.info(f"  [검증] 이번 배치 적응형 임계값: {threshold:.2f}점 (fact {len(graded)}개 채점 완료)")
+    # 판정 경계는 이산 규칙으로 고정돼 있다(채택 ≥4 / 애매 =3 / 기각 ≤2).
+    # 배치 분포를 보지 않으므로, 같은 fact가 어느 회차에 검색됐는지에 따라 판정이
+    # 달라지지 않는다. classify_score() 위 주석에 전환 근거가 있다.
+    log.info(f"  [검증] fact {len(graded)}개 채점 완료 — 이산 규칙으로 판정 "
+             f"(채택 ≥{ACCEPT_MIN_SCORE} / 애매 =3 / 기각 ≤{REJECT_MAX_SCORE})")
 
     counts = {"accepted": 0, "ambiguous": 0, "rejected": 0}
-    for fact, reasoning in prescreened:
+    for fact, reasoning, excerpt in prescreened:
         fact.verification_score = SCORE_MIN
         fact.verification_status = VerificationStatus.REJECTED
         fact.verification_reasoning = reasoning
         fact.citation_verified = False
         fact.needs_source_check = True
+        fact.source_excerpt = excerpt
         save_fact(fact)
         counts["rejected"] += 1
+    _COUNT_KEY = {
+        VerificationStatus.ACCEPTED: "accepted",
+        VerificationStatus.AMBIGUOUS: "ambiguous",
+        VerificationStatus.REJECTED: "rejected",
+    }
     for fact, source_content, combined, reasoning in graded:
-        if combined >= threshold:
-            status = VerificationStatus.ACCEPTED
-            counts["accepted"] += 1
-        elif combined <= threshold - 2:
-            status = VerificationStatus.REJECTED
-            counts["rejected"] += 1
-        else:
-            status = VerificationStatus.AMBIGUOUS
-            counts["ambiguous"] += 1
+        status = classify_score(combined)
+        counts[_COUNT_KEY[status]] += 1
 
         fact.verification_score = combined
         fact.verification_status = status
         fact.verification_reasoning = reasoning
         fact.citation_verified = status == VerificationStatus.ACCEPTED
         fact.needs_source_check = status != VerificationStatus.ACCEPTED
+        fact.source_excerpt = make_source_excerpt(source_content)
         save_fact(fact)
 
         if status != VerificationStatus.ACCEPTED:
