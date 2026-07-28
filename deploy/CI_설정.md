@@ -50,7 +50,29 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/compute.viewer"
+
+# VM에 붙은 서비스 계정을 "대신할" 권한 (actAs)
+# 이것만 프로젝트 전체가 아니라 해당 계정 하나에만 준다.
+export VM_SA=$(gcloud compute instances describe planner-vm --zone=asia-northeast3-a \
+                 --format='value(serviceAccounts[0].email)')
+gcloud iam service-accounts add-iam-policy-binding "$VM_SA" \
+  --member="serviceAccount:${SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
 ```
+
+> **`actAs`를 왜 따로 주는가** (2026-07-28 첫 CI 실행에서 걸림)
+>
+> GCE 인스턴스는 서비스 계정을 달고 돕니다. 그 인스턴스에 SSH하는 것은 사실상 그 계정의
+> 권한을 쓰는 것이라, GCP는 호출자에게 **그 계정을 대신할 권한**을 요구합니다. 없으면
+> 이렇게 막힙니다.
+>
+> ```
+> PERMISSION_DENIED: User does not have iam.serviceAccounts.actAs permission
+> on the instance's service account.
+> ```
+>
+> `roles/iam.serviceAccountUser`를 **프로젝트 수준**으로 주면 프로젝트의 *모든* 서비스
+> 계정을 대신할 수 있게 됩니다. 위처럼 **VM의 계정 하나에만** 바인딩해 범위를 좁힙니다.
 
 > **왜 `osLogin`이 아니라 `osAdminLogin`인가**
 >
@@ -254,6 +276,7 @@ WIF는 실패 메시지가 불친절합니다. 아래 넷이 거의 전부입니
 | `The given credential is rejected by the attribute condition` | 조건절의 저장소명이 실제와 다름 | `assertion.repository`가 `소유자/저장소` 형식인지 확인 |
 | `Invalid value for "audience"` | `GCP_WIF_PROVIDER` 값이 잘림 | `projects/<번호>/locations/global/workloadIdentityPools/<풀>/providers/<공급자>` 전체인지 확인 |
 | `Permission denied (publickey)` | OS Login 미활성 또는 `roles/compute.osAdminLogin` 누락 | 1-1·1-4 확인 |
+| `does not have iam.serviceAccounts.actAs permission` | VM 서비스 계정에 대한 `serviceAccountUser` 누락 | 1-1 마지막 블록 실행 |
 | `<user> is not in the sudoers file` | `osLogin`만 부여됨 | `osAdminLogin`으로 교체 (1-1) |
 | `Error while connecting [4033: 'not authorized']` | IAP 권한 없음 | `roles/iap.tunnelResourceAccessor` 확인 |
 | 배포 단계가 멈춘 채 끝나지 않음 | sudo 비밀번호 대기 | **1-3** 확인 |
