@@ -12,7 +12,16 @@
 
 	# API는 로컬 uvicorn으로 넘긴다. 같은 오리진이므로 CORS가 필요 없다 —
 	# 프론트가 /api/... 를 상대경로로 부르면 끝난다.
-	handle /api/* {
+	#
+	# handle_path(= handle + uri strip_prefix)를 쓰는 이유 (2026-07-28 수정):
+	# 프론트는 VITE_API_BASE=/api 로 빌드되어 /api/projects 를 부르는데,
+	# 백엔드는 app.include_router(router) 로 prefix 없이 /projects 에 붙어 있다.
+	# handle 은 경로를 그대로 넘기므로 백엔드가 /api/projects 를 못 찾아
+	# FastAPI 기본 404({"detail":"Not Found"})가 화면에 그대로 떴다.
+	# 백엔드에 prefix="/api"를 주는 방법도 있으나 그러면 pytest 54개와
+	# 로컬 개발(VITE_API_BASE 기본값 http://localhost:8000)이 함께 깨진다.
+	# 경로 차이는 배포 구성의 문제이므로 여기서 흡수한다.
+	handle_path /api/* {
 		reverse_proxy 127.0.0.1:8000 {
 			# 그래프 실행은 백그라운드로 빠지므로 응답 자체는 빠르지만,
 			# DOCX 다운로드가 느릴 수 있어 여유를 둔다.
