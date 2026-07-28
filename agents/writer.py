@@ -122,9 +122,30 @@ SYNTHESIS_SCHEMA = {
 }
 
 
+# 사람이 읽기 좋은 배율 표기 (2026-07-28 추가).
+# "11,613,000,000 USD"는 정확하지만 자릿수를 세어야 읽힌다. 특히 이 문자열은
+# _build_exec_summary()가 개요 작성 LLM에게 그대로 넘기는 입력이라, 모호하면
+# 모델이 임의로 자릿수를 "보정"한다 — 실제로 "TAM 116 USD"를 넘겼더니 개요에
+# "1,160억 USD", 시사점에 "1 USD(약 1.3억 원)"라고 쓴 사고가 있었다(2026-07-28).
+# 정확한 값과 읽기 쉬운 값을 함께 주어 해석의 여지를 남기지 않는다.
+def _fmt_readable_scale(value: float) -> Optional[str]:
+    """1억 이상이면 '약 116.1억', 1만 이상이면 '약 5,793만' 식의 보조 표기를 만든다."""
+    abs_v = abs(value)
+    if abs_v >= 1e12:
+        return f"약 {value / 1e12:,.1f}조"
+    if abs_v >= 1e8:
+        return f"약 {value / 1e8:,.1f}억"
+    if abs_v >= 1e4:
+        return f"약 {value / 1e4:,.0f}만"
+    return None
+
+
 def _fmt_num(value: Optional[float], unit: str) -> str:
     if value is None:
         return "계산 불가"
+    readable = _fmt_readable_scale(value)
+    if readable:
+        return f"{value:,.0f} {unit} ({readable} {unit})"
     return f"{value:,.0f} {unit}"
 
 

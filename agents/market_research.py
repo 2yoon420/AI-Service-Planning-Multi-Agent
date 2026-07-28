@@ -80,9 +80,20 @@ MARKET_SIZING_SCHEMA = {
                     "type": "boolean",
                     "description": "facts 중에 전체 시장 규모(TAM)를 추정할 만한 수치가 있었는지 여부",
                 },
-                "tam_usd": {
+                # 2026-07-28 변경 — 원래는 tam_usd(number) 하나로 "LLM이 직접 USD로 환산해서
+                # 답하라"는 계약이었다. 실제 실행에서 "116.13억 달러"를 116.13으로 그대로 답해
+                # 기획서에 "TAM 116 USD"가 찍히는 사고가 났다(유럽 친환경 포장재, 2026-07-28).
+                # 환산은 산술이므로 코드가 해야 한다는 이 프로젝트의 원칙에 맞춰, LLM에게는
+                # "원문에 적힌 대로" 값과 배율 단어를 분리해 보고하게 하고 곱셈은 코드가 한다.
+                "tam_value": {
                     "type": "number",
-                    "description": "TAM을 미국 달러(USD)로 환산한 값. '84억 4천만 달러', '$505B' 같은 표현을 숫자로 정확히 환산할 것. tam_found가 false면 0. 가능하면 미래 예측 종료 연도(예: 2031년, 2034년)의 값이 아니라 fact 목록에 있는 가장 최근 실측(또는 실측에 가장 가까운) 연도의 시장 규모를 우선 사용할 것.",
+                    "description": "TAM 수치를 원문에 적힌 숫자 그대로. 배율 단어(억/billion 등)는 여기 반영하지 말 것. 예) '116.13억 달러' -> 116.13, '$505B' -> 505, '2,956억 2천만 달러' -> 2956.2. tam_found가 false면 0. 가능하면 미래 예측 종료 연도(예: 2031년, 2034년)의 값이 아니라 fact 목록에 있는 가장 최근 실측(또는 실측에 가장 가까운) 연도의 시장 규모를 우선 사용할 것.",
+                },
+                "tam_scale": {
+                    "type": "string",
+                    "enum": ["없음", "천", "만", "억", "조",
+                             "thousand", "million", "billion", "trillion"],
+                    "description": "tam_value에 곱해야 할 배율 단어를 원문 표기 그대로. 예) '116.13억 달러' -> '억', '$505B' -> 'billion', '5,793만 달러' -> '만', '3,200달러' -> '없음'. 원문에 배율 단어가 없으면 '없음'.",
                 },
                 "tam_year": {
                     "type": "string",
@@ -111,7 +122,8 @@ MARKET_SIZING_SCHEMA = {
             },
             "required": [
                 "tam_found",
-                "tam_usd",
+                "tam_value",
+                "tam_scale",
                 "tam_year",
                 "tam_source_snippet",
                 "sam_ratio",
@@ -122,6 +134,37 @@ MARKET_SIZING_SCHEMA = {
         },
     },
 }
+
+
+# --- 배율 환산 (2026-07-28 추가) --------------------------------------------
+# LLM은 "원문에 적힌 숫자 + 배율 단어"만 보고하고, 실제 곱셈은 여기서 코드가 한다.
+# 이 프로젝트의 원칙("LLM은 판단만, 산술·검증은 코드가")을 시장규모 계산에도
+# 실제로 적용하기 위한 것 — 그전까지는 이 환산만 LLM에게 맡겨져 있었다.
+_SCALE_MULTIPLIER: dict[str, float] = {
+    "없음": 1.0,
+    "천": 1e3,
+    "만": 1e4,
+    "억": 1e8,
+    "조": 1e12,
+    "thousand": 1e3,
+    "million": 1e6,
+    "billion": 1e9,
+    "trillion": 1e12,
+}
+
+# 국가·권역 단위 시장의 TAM이 100만 USD 미만인 경우는 사실상 없다. 이 선 아래로
+# 나오면 LLM이 배율을 잘못 읽었을 가능성이 높다고 보고 경고를 남긴다.
+# 값을 조용히 버리지 않는 이유: 무엇이 왜 이상한지 문서에 드러나야 사람이 판단할 수 있다.
+_TAM_SANITY_MIN_USD = 1_000_000.0
+
+
+def scale_to_multiplier(scale: str | None) -> float:
+    """배율 단어를 곱할 수를 돌려준다. 모르는 표현이면 1.0(=배율 없음)으로 처리한다.
+
+    한계: enum에 없는 지역 표현(인도의 lakh/crore 등)은 여전히 못 잡는다."""
+    if not scale:
+        return 1.0
+    return _SCALE_MULTIPLIER.get(scale.strip(), 1.0)
 
 
 def _estimate_topdown(client: OpenAI, topic: str, target_market: str, facts: list[Fact]) -> dict:
@@ -140,11 +183,19 @@ def _estimate_topdown(client: OpenAI, topic: str, target_market: str, facts: lis
 {facts_text}
 
 이 fact들을 바탕으로 Top-down 방식 시장규모 추정에 필요한 값을 제안하세요.
-- TAM: facts 중 전체 시장 규모를 나타내는 수치를 찾아 USD로 환산
+- TAM: facts 중 전체 시장 규모를 나타내는 수치를 찾아 tam_value(숫자)와 tam_scale(배율 단어)로 분리해 보고
 - SAM 비중: TAM 중 목표시장(지역/세그먼트)이 차지하는 비중 (facts에 지역별 점유율이 있으면 활용)
 - SOM 비중: SAM 중 신규 진입자가 현실적으로 확보 가능한 점유율
 
 TAM으로 쓸 만한 수치가 facts에 전혀 없으면 tam_found를 false로 하세요.
+
+매우 중요 — 단위 환산은 하지 마세요:
+- tam_value에는 **원문에 적힌 숫자를 그대로** 넣고, 배율 단어는 tam_scale에 따로 넣으세요.
+  올바른 예) "116.13억 달러" -> tam_value=116.13, tam_scale="억"
+  올바른 예) "$505B"        -> tam_value=505,    tam_scale="billion"
+  틀린 예)  "116.13억 달러" -> tam_value=11613000000  (직접 환산하지 마세요)
+  틀린 예)  "116.13억 달러" -> tam_value=116.13, tam_scale="없음"  (배율을 빠뜨렸습니다)
+- 실제 곱셈은 프로그램이 수행하므로, 당신은 원문을 정확히 옮기기만 하면 됩니다.
 
 매우 중요 — TAM 기준 연도 선택:
 - fact 목록에 여러 연도의 시장 규모 수치가 있다면(예: "2024년 X달러", "2031년 Y달러로 성장 전망"),
@@ -219,13 +270,31 @@ def calculate_market_sizing(
 
     tam_topdown = sam_topdown = som_topdown = None
     if topdown["tam_found"]:
-        tam_topdown = topdown["tam_usd"]
+        # 배율 환산은 코드가 한다(2026-07-28). LLM은 tam_value/tam_scale만 보고한다 —
+        # 이전에는 LLM이 직접 USD로 환산하게 두었고, "116.13억 달러"를 116.13으로
+        # 답하는 바람에 기획서에 "TAM 116 USD"가 찍히는 사고가 났다.
+        raw_value = float(topdown.get("tam_value", 0) or 0)
+        scale_word = topdown.get("tam_scale", "없음")
+        multiplier = scale_to_multiplier(scale_word)
+        tam_topdown = raw_value * multiplier
         sam_topdown = tam_topdown * topdown["sam_ratio"]
         som_topdown = sam_topdown * topdown["som_ratio"]
+
+        scale_note = "" if multiplier == 1.0 else f" [원문 {raw_value:,.4g}{scale_word} x {multiplier:,.0f}]"
         assumptions.append(
-            f"[Top-down] TAM={tam_topdown:,.0f} USD ({topdown['tam_year']} 기준, 근거: "
+            f"[Top-down] TAM={tam_topdown:,.0f} USD{scale_note} ({topdown['tam_year']} 기준, 근거: "
             f"\"{topdown['tam_source_snippet']}\")"
         )
+
+        # 상식 검산 — 권역/국가 시장 TAM이 100만 USD 미만이면 배율 해석이 틀렸을 공산이 크다.
+        # 값을 지우지 않고 경고를 남겨, 사람이 초안에서 바로 알아볼 수 있게 한다.
+        if 0 < tam_topdown < _TAM_SANITY_MIN_USD:
+            assumptions.append(
+                f"⚠️ [검산 경고] TAM이 {tam_topdown:,.0f} USD로 계산되었습니다. 국가·권역 단위 "
+                f"시장 규모로는 비정상적으로 작습니다(기준 {_TAM_SANITY_MIN_USD:,.0f} USD). "
+                f"원문의 배율 단위(억/billion 등)를 잘못 읽었을 가능성이 있으니 "
+                f"근거 문장을 직접 확인하십시오."
+            )
         assumptions.append(
             f"[Top-down] SAM 비중={topdown['sam_ratio']:.2%} — {topdown['sam_ratio_reasoning']}"
         )
