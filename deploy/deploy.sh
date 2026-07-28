@@ -53,17 +53,20 @@ rm -rf "$WEB_DIR".old
 
 echo "== 6/6  서비스 재시작 =="
 sudo systemctl restart planner-api
-sleep 3
-# 죽었는지 살았는지 반드시 확인한다. systemctl restart는 성공해도
-# 앱이 곧바로 죽으면 종료코드가 0으로 나온다.
-sudo systemctl is-active --quiet planner-api || {
-  echo "!! 서비스가 살아있지 않습니다. 로그:"
-  sudo journalctl -u planner-api -n 40 --no-pager
-  exit 1
-}
-curl -fsS --max-time 10 http://127.0.0.1:8000/health > /dev/null || {
-  echo "!! /health 응답 없음. 로그:"
-  sudo journalctl -u planner-api -n 40 --no-pager
-  exit 1
-}
+
+# uvicorn이 모듈을 임포트하는 몇 초 동안은 포트가 비어 있다.
+# 한 번만 찔러보면 이 정상적인 기동 구간을 장애로 오판할 수 있으므로 반복 확인한다.
+# (2026-07-28 실측: 재시작~기동완료 4초. 15초·1초 간격은 그 위에 3배 이상 여유를 둔 값이며
+#  근거 논문이나 SLA에서 온 수치가 아니다. 기동이 이보다 오래 걸리는 변경이 생기면 늘려야 한다.)
+ATTEMPTS=15
+until curl -fsS --max-time 2 http://127.0.0.1:8000/health > /dev/null 2>&1; do
+  ATTEMPTS=$((ATTEMPTS - 1))
+  if [ "$ATTEMPTS" -le 0 ]; then
+    echo "!! /health 응답 없음(15초 경과). 로그:"
+    sudo systemctl status planner-api --no-pager || true
+    sudo journalctl -u planner-api -n 40 --no-pager
+    exit 1
+  fi
+  sleep 1
+done
 echo "배포 완료 — $(date '+%F %T')"
