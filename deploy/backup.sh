@@ -21,5 +21,12 @@ done
 [ -d "$DATA_DIR/outputs" ] && cp -r "$DATA_DIR/outputs" "$TMP/outputs" || true
 
 tar -czf "$TMP/backup-$STAMP.tar.gz" -C "$TMP" $(cd "$TMP" && ls | grep -v '\.tar\.gz$')
-gsutil -q cp "$TMP/backup-$STAMP.tar.gz" "gs://$BUCKET/backups/"
+
+# snap으로 깔린 gsutil은 $HOME이 /opt/planner처럼 /home 밖에 있으면 막힌다.
+# ("Sorry, home directories outside of /home needs configuration.") 이건 snapd가
+# 실행 전에 실제 계정 홈(/etc/passwd)을 직접 확인하는 것이라 $HOME 재정의로도 못 피한다.
+# venv에 pip로 설치한 gsutil은 순수 파이썬 패키지라 이 제약 자체가 없다.
+GSUTIL="/opt/planner/venv/bin/gsutil"
+[ -x "$GSUTIL" ] || GSUTIL=gsutil   # venv에 없으면(로컬 테스트 등) PATH의 것으로 폴백
+"$GSUTIL" -q cp "$TMP/backup-$STAMP.tar.gz" "gs://$BUCKET/backups/"
 echo "백업 완료: gs://$BUCKET/backups/backup-$STAMP.tar.gz"
