@@ -1,0 +1,569 @@
+{
+ "labeled_at": "2026-07-28T14:21:36.031Z",
+ "axis": "relevance",
+ "method": "분해 척도 v2 (주제 범위 + 지역·대상 범위 → 코드가 환산)",
+ "labeler": "이후윤",
+ "n": 70,
+ "labels": [
+  {
+   "id": "L001",
+   "dataset": "북미_웨어러블",
+   "text": "미국 고용주의 약 39%가 웨어러블 건강 모니터링 인센티브를 제공하고 있습니다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L002",
+   "dataset": "한국_HMR",
+   "text": "일동후디스 하이뮨은 2022년 당뇨환자용 균형당뇨식과 일반인용 균형영양식 두 제품을 출시하며 한국 시니어 케어푸드 시장에 진출했다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L003",
+   "dataset": "한국_HMR",
+   "text": "아워홈은 2021년 '케어플러스' 브랜드를 출시하고 2023년부터 노인 저작 능력 개선용 HMR 연구 중",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L004",
+   "dataset": "북미_웨어러블",
+   "text": "웰리시스는 미국 심전도 서비스 전문업체와 '에스패치' 공급 계약을 체결하고 텍사스를 중심으로 미국 내 3개 주에 공급을 확대한다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L005",
+   "dataset": "북미_웨어러블",
+   "text": "뷰노의 AI 기반 흉부 엑스레이 진단 제품이 미국 식품의약국(FDA) 승인을 획득했으며, 북미 시장에서의 경쟁력을 바탕으로 추가 제품 승인(예: 뷰노메드 딥카스)이 예상됩니다.",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L006",
+   "dataset": "한국_HMR",
+   "text": "오뚜기 '3분 단백질' 제품으로 단백질 보충제 시장 진출",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L007",
+   "dataset": "유럽_포장재",
+   "text": "친환경 포장재 시장은 지속 가능한 소비자 요구와 환경 친화적 소재 사용 증가로 인해 성장하고 있습니다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L008",
+   "dataset": "북미_웨어러블",
+   "text": "북미 지역을 포함한 전 세계 인구 노령화와 만성 질환 유병률 증가로 인해 지속적인 건강 모니터링 솔루션 수요가 증가하고 있습니다.",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L009",
+   "dataset": "북미_반려동물",
+   "text": "보험사 중 일부는 GPS 추적 기술 사용 시 보험료 할인 혜택을 제공한다",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L010",
+   "dataset": "유럽_포장재",
+   "text": "친환경 포장재 디자인 경쟁력 강화를 위해 iF 디자인 어워드와 같은 글로벌 인증 획득 사례 증가(리스튜디오의 페이퍼 몰드 기술 적용 사례)",
+   "topic_scope": "예",
+   "market_scope": "부분",
+   "human_relevance": 4
+  },
+  {
+   "id": "L011",
+   "dataset": "북미_웨어러블",
+   "text": "벨리아 스마트링(VELIA Smart Ring)은 PPG 센서 탑재로 심박수, 혈중산소포화도, 체온, 혈압, 스트레스 지수 등 측정 가능",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L012",
+   "dataset": "한국_HMR",
+   "text": "매일유업의 '셀렉스'는 2025년 5월 기준 누적 매출 5000억 원을 돌파하며 한국 시니어 케어푸드 시장에서 경쟁력을 보임",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L013",
+   "dataset": "유럽_포장재",
+   "text": "리스튜디오는 화장품 및 전자제품용 페이퍼 몰드·바이오 플라스틱 기반 친환경 포장재를 개발했으며, iF 디자인 어워드 2026 본상 수상으로 유럽 시장 디자인 경쟁력 입증. 아모레퍼시픽과 협업해 프리미엄 브랜드 이미지 유지를 위한 친환경 포장 솔루션 제공.",
+   "topic_scope": "예",
+   "market_scope": "부분",
+   "human_relevance": 4
+  },
+  {
+   "id": "L014",
+   "dataset": "유럽_포장재",
+   "text": "1.5Kg 이하 신선과일·채소 보호 포장·일회용 설탕·소금·소스류 포장·Horeca 용 식기류 사용이 금지됨.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L015",
+   "dataset": "유럽_포장재",
+   "text": "식품 및 음료 부문이 2022년 43.8% 시장 점유율 기록, 유럽 B2B 친환경 포장재 수요 영향",
+   "topic_scope": "아니오",
+   "market_scope": "예",
+   "human_relevance": 2
+  },
+  {
+   "id": "L016",
+   "dataset": "북미_반려동물",
+   "text": "방수 및 내구성 있는 구조로 다양한 기상 조건과 야외 활동에서도 신뢰할 수 있는 성능을 보장한다",
+   "topic_scope": "부분",
+   "market_scope": "부분",
+   "human_relevance": 3
+  },
+  {
+   "id": "L017",
+   "dataset": "한국_HMR",
+   "text": "일동후디스 하이뮨은 2020년 출시 후 2022년 누적 매출 3000억원, 2023년 4000억원 돌파하며 단백질 시장 1위 브랜드 기록",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L018",
+   "dataset": "한국_HMR",
+   "text": "CJ프레시웨이는 2015년 케어푸드 전문 브랜드 '헬씨누리'를 론칭하고 노인복지시설 급식 사업 및 이동급식 시장 확대를 통해 시장 점유율 강화 중",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L019",
+   "dataset": "북미_웨어러블",
+   "text": "2024년 글로벌 웨어러블 헬스케어 기기 시장 규모는 410.7억 달러(약 56.9조 원)로 북미가 최대 시장을 형성했다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L020",
+   "dataset": "북미_웨어러블",
+   "text": "2025년 기준 미국 진단용 웨어러블 의료기기 시장은 6,800만 명 이상의 활동적인 사용자를 보유",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L021",
+   "dataset": "한국_HMR",
+   "text": "매일유업은 2023년 균형 영양 조제 식품 3종, 혼합 음료 1종, 당뇨환자용 영양 조제 식품 1종 등 총 5종의 음료 형태 케어푸드 제품을 리뉴얼 출시함.",
+   "topic_scope": "아니오",
+   "market_scope": "예",
+   "human_relevance": 2
+  },
+  {
+   "id": "L022",
+   "dataset": "북미_반려동물",
+   "text": "캐나다 동물병원 100여 곳에 반려동물 진단 보조 솔루션 '엑스칼리버' 적용 예정",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L023",
+   "dataset": "북미_웨어러블",
+   "text": "청각 보조 웨어러블 기기는 단순히 소리 증폭을 넘어 다기능 헬스기기로 발전하고 있다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L024",
+   "dataset": "유럽_포장재",
+   "text": "EPR(확장된 생산자 책임제) 도입으로 EU 시장 수입자가 소재국 담당 기관에 등록 및 연간 폐기 비용 부담 의무화됨.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L025",
+   "dataset": "유럽_포장재",
+   "text": "유럽 B2B 유통 시장에서 지속가능성은 B2B 구매 결정의 중요한 요소가 되고 있습니다.",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L026",
+   "dataset": "북미_반려동물",
+   "text": "미국 반려동물 시장 내 펫테크 기기는 코로나19 팬데믹 이후 더욱 증가했으며, 특히 스마트 건강 관리 기기에 대한 수요가 급증함.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L027",
+   "dataset": "북미_반려동물",
+   "text": "보험사들은 예방적 진단(연례 혈액검사, 유전자 검사 등)을 보험 적용 대상에 추가하며, 사후 대응형에서 예방형 케어 모델로 전환하고 있습니다.",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L028",
+   "dataset": "북미_반려동물",
+   "text": "2023-2033년 펫테크 시장 전망 보고서에서 북미 지역 스마트 건강관리 기기 시장이 성장 추세로 전망됨",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L029",
+   "dataset": "한국_HMR",
+   "text": "2020년 식품의약품안전처는 찌개류 HMR 조리 시 나트륨 배출 촉진을 위한 파, 양파 등 칼륨 함량 높은 재료를 함께 조리할 것을 권고",
+   "topic_scope": "부분",
+   "market_scope": "부분",
+   "human_relevance": 3
+  },
+  {
+   "id": "L030",
+   "dataset": "한국_HMR",
+   "text": "일동후디스 하이뮨 프로틴 밸런스(하이뮨) 브랜드가 2023년 누적 매출 4000억원 달성",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L031",
+   "dataset": "북미_웨어러블",
+   "text": "2024년 미국 의료 기관의 43% 이상이 수술 후 회복 관리를 위해 웨어러블 모니터링 채택",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L032",
+   "dataset": "북미_반려동물",
+   "text": "반려동물 3마리 중 1마리는 평생 실종될 것으로 예상되며(Animal Humane Society), 이에 따라 위치 확인 기술 수요가 증가하고 있습니다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L033",
+   "dataset": "한국_HMR",
+   "text": "아워홈은 '케어플러스' 양념육 3종을 포함한 환자용 케어푸드 사업을 B2B 중심으로 전개하며, 암환자 및 고령자용 HMR 개발 중입니다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L034",
+   "dataset": "북미_반려동물",
+   "text": "반려동물 위치 추적을 위한 GPS 지원 솔루션 수요 증가로 추적 장비 부문이 2026-2035년 사이 상당한 성장이 예상됩니다.",
+   "topic_scope": "부분",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L035",
+   "dataset": "한국_HMR",
+   "text": "2021년 11월 서울아산병원 노년내과와 MOU 체결",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L036",
+   "dataset": "유럽_포장재",
+   "text": "2030년부터 플라스틱 포장재에 최소 30~35% 재활용 함량 사용 의무화 및 PFAS·중금속 등 유해물질 제한 기준 명시",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L037",
+   "dataset": "북미_웨어러블",
+   "text": "2025년 미국 진단용 웨어러블 의료기기 시장의 54% 이상이 AI 기반 분석 통합",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L038",
+   "dataset": "유럽_포장재",
+   "text": "유럽을 중심으로 PFAS(과불화화합물) 사용 금지 법규가 식품 서비스 분야에서 시행되며 몰드 펄프 포장 시장 성장을 촉진",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L039",
+   "dataset": "유럽_포장재",
+   "text": "í í¸ë¼Pak ì¸í°ë´ì ë, ìì½ë¥´, ì¸í°ë´ì ë íì´í¼, ëª¬ë ê·¸ë£¹, ì¤ë¤ ìì´ ì½í¼ë ì´ì  ì´ë©°, ì´ë¤ì´ 2024ë  51% ì ìì¥ ì ì ì¨ì´ììµëë¤",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L040",
+   "dataset": "북미_반려동물",
+   "text": "SKT의 AI 기반 반려동물 진단 보조 솔루션 '엑스칼리버'가 북미 시장(캐나다 및 미국)에 진출하였으며, 캐나다 내 동물병원 100여 곳에 8월 중 제공될 예정입니다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L041",
+   "dataset": "유럽_포장재",
+   "text": "영국 자원협회는 2025년까지 음료 PET 병의 재활용 플라스틱 함량을 25%로 확대하는 목표를 설정했으며, 2030년까지 30%로 확대할 계획입니다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L042",
+   "dataset": "유럽_포장재",
+   "text": "Ecocool, 팔레트 화물용 종이 기반 보온커버 'Paperhood' 개발 (콜드체인 수송포장 재활용성 전환, 연구대상: 친환경 포장재, 목표시장: 유럽 B2B 유통 시장 관련)",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L043",
+   "dataset": "유럽_포장재",
+   "text": "불필요한 포장 감축 목표는 2030년까지 5%, 2035년까지 10%, 2040년까지 15%이며, 플라스틱 포장은 2030년까지 10%, 2035년까지 15%, 2040년까지 20% 감축 목표 제시.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L044",
+   "dataset": "북미_반려동물",
+   "text": "SKT의 AI 기반 스마트 반려동물 건강관리 기기 '엑스칼리버'가 캐나다 동물병원 100여 곳에 8월 중 제공될 예정임.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L045",
+   "dataset": "유럽_포장재",
+   "text": "Amcor plc (AMCR)는 Berry Global의 전략적 인수 이후 유럽 B2B 유통 시장에서 식품, 음료, 헬스케어 및 개인 관리 분야의 지속 가능한 포장 솔루션 영향력을 확장했습니다.",
+   "topic_scope": "아니오",
+   "market_scope": "예",
+   "human_relevance": 2
+  },
+  {
+   "id": "L046",
+   "dataset": "유럽_포장재",
+   "text": "2028년 말까지 모든 재사용 가능 포장재에 일원화된 라벨 및 QR 코드 표기 의무화됨.",
+   "topic_scope": "부분",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L047",
+   "dataset": "한국_HMR",
+   "text": "정식품의 '베지밀 5060 시니어 두유'는 출시 2년 만에 누적 판매량 1000만 개를 기록하며 시니어 두유 시장 개척",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L048",
+   "dataset": "한국_HMR",
+   "text": "일동후디스 하이뮨은 2020년 출시 후 2021년 국내 단백질 제품 시장 1위 브랜드로 등극, 2023년 기준 시장 점유율 및 매출 성장률에서 경쟁 우위",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L049",
+   "dataset": "북미_웨어러블",
+   "text": "규제기관의 커넥티드 다이아그노스틱스 패스트 트랙 패스웨이 구축으로 북미 시장 진입 장벽이 점차 낮아지고 있습니다.",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L050",
+   "dataset": "유럽_포장재",
+   "text": "인도 정부는 2025년 7월 도입된 '플라스틱 폐기물 관리 규정'에서 포장재에 바코드 및 QR 코드 표시를 의무화해 시장 규제를 강화했습니다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L051",
+   "dataset": "북미_반려동물",
+   "text": "모바일 애플리케이션을 통한 반려동물 건강 모니터링 및 원격 수의사 상담 수요가 증가하고 있습니다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L052",
+   "dataset": "북미_반려동물",
+   "text": "2021년 미국 반려동물 시장 규모는 약 1236억 달러로, 펫테크 기기 중 웨어러블 헬스케어 기기가 가장 큰 비중을 차지함.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L053",
+   "dataset": "한국_HMR",
+   "text": "일동후디스 하이뮨은 2023년 누적 매출 4000억 원을 기록하며 한국 시니어 케어푸드 시장에서 대표 단백질 브랜드로 성장",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L054",
+   "dataset": "북미_웨어러블",
+   "text": "낙상 감지 기능은 갑작스러운 낙상 시 보호자나 구조 기관에 자동 알림을 전송하여 생명 구조의 첫 단추 역할을 합니다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L055",
+   "dataset": "한국_HMR",
+   "text": "현대그린푸드의 케어푸드 브랜드 '그리팅' 메디푸드 매출은 2022년 4월 출시 이후 매 분기 20% 이상씩 성장했다.",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L056",
+   "dataset": "한국_HMR",
+   "text": "오리온 '닥터유 프로'는 국내 최고 단백질 함량(40g) 제품으로 시장 진입",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L057",
+   "dataset": "한국_HMR",
+   "text": "현대그린푸드는 2023년 당뇨식단 24종과 암환자식단을 합쳐 '메디푸드(환자식)' 카테고리를 신설할 예정이며, 식단 수를 두 배 확대할 계획임",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L058",
+   "dataset": "북미_웨어러블",
+   "text": "미국 FDA는 2019년 일체형 웨어러블 인공 췌장을 획기적인 의료 기기로 지정함",
+   "topic_scope": "부분",
+   "market_scope": "예",
+   "human_relevance": 4
+  },
+  {
+   "id": "L059",
+   "dataset": "유럽_포장재",
+   "text": "2030년까지 모든 포장재 디자인을 재활용 가능하게 설계해야 한다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L060",
+   "dataset": "북미_웨어러블",
+   "text": "애플워치는 고혈압 알림 기능을 통해 이상 징후 감지 시 외부 혈압계 측정을 유도하며, 낙상 감지 및 응급 연락 기능을 지원합니다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L061",
+   "dataset": "유럽_포장재",
+   "text": "지속 가능한 친환경 포장재 시장이 2034년까지 3,430억 달러 규모로 성장할 것으로 예상됩니다.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L062",
+   "dataset": "유럽_포장재",
+   "text": "2023년 글로벌 포장 시장 규모는 2,956억 2천만 달러로 평가되었으며, 2032년까지 5,793억 5천만 달러에 이를 것으로 예상됩니다.",
+   "topic_scope": "부분",
+   "market_scope": "부분",
+   "human_relevance": 3
+  },
+  {
+   "id": "L063",
+   "dataset": "한국_HMR",
+   "text": "신세계푸드는 2020년 케어푸드 전문 브랜드 '이지밸런스'를 론칭해 연하식 제품을 개발함.",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L064",
+   "dataset": "유럽_포장재",
+   "text": "아마존은 2024년 유럽 내 모든 주문에 재활용 가능한 포장재를 사용하는 시스템을 시작했다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L065",
+   "dataset": "한국_HMR",
+   "text": "정식품의 '베지밀 5060 시니어 두유'는 출시 2년 만에 누적 판매량 1000만 개를 돌파했다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L066",
+   "dataset": "유럽_포장재",
+   "text": "í í¸ë¼Pak ì¸í°ë´ì ëì´ 2024ë  14.1% ì ìì¥ ì ì ì¨ë¡ ì ëíê³ ììµëë¤",
+   "topic_scope": "아니오",
+   "market_scope": "아니오",
+   "human_relevance": 1
+  },
+  {
+   "id": "L067",
+   "dataset": "유럽_포장재",
+   "text": "호프만 네오팩(Hoffmann Neopac)은 100% 재활용 금속소재 캔을 개발했으며, 생산 과정에서 에너지 사용량 60%를 절감함.",
+   "topic_scope": "예",
+   "market_scope": "아니오",
+   "human_relevance": 2
+  },
+  {
+   "id": "L068",
+   "dataset": "북미_웨어러블",
+   "text": "미국 FDA의 OTC 보청기 카테고리 신설 이후 월마트, 코스트코 등 일반 소매점과 온라인을 통해 수백 달러대의 보청기가 판매되고 있다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L069",
+   "dataset": "북미_웨어러블",
+   "text": "딥노이드의 AI 기반 흉부 엑스레이 진단 솔루션 '딥체스트'가 미국 시장 진출을 준비 중이며, 북미 시니어 건강관리 시장에서의 활용 가능성이 주목됩니다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  },
+  {
+   "id": "L070",
+   "dataset": "북미_반려동물",
+   "text": "SKT는 미국 수의영상장비 유통사 마이벳이미징과 ‘엑스칼리버’ 도입을 위한 업무협약(MOU)을 체결했다.",
+   "topic_scope": "예",
+   "market_scope": "예",
+   "human_relevance": 5
+  }
+ ]
+}

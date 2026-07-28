@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<title>관련성 라벨링 v2</title>
+<style>
+ :root{--ink:#1a1a1a;--mut:#6b6b6b;--line:#e2e2e2;--ac:#1B8A8F;--bg:#fafafa}
+ *{box-sizing:border-box}
+ body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+      color:var(--ink);background:var(--bg);display:flex;justify-content:center;padding:28px 18px 90px}
+ main{width:100%;max-width:740px}
+ h1{font-size:19px;margin:0 0 6px}
+ .lede{color:var(--mut);font-size:14px;margin-bottom:8px}
+ .warn{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;
+       font-size:13px;margin-bottom:20px}
+ .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-bottom:6px}
+ .bar>i{display:block;height:100%;background:var(--ac);width:0;transition:width .2s}
+ .top{display:flex;justify-content:space-between;font-size:13px;color:var(--mut);margin-bottom:18px}
+ .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px;margin-bottom:14px}
+ .ctx{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:14px;
+      padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:16px}
+ .ctx b{color:var(--mut);font-weight:600;white-space:nowrap}
+ .fact{font-size:17px;line-height:1.7;padding:15px;background:#f5f8f8;
+       border-left:3px solid var(--ac);border-radius:0 6px 6px 0;margin-bottom:20px}
+ .q{margin-bottom:16px}
+ .q>p{margin:0 0 8px;font-size:15px}
+ .q .hint{font-size:12.5px;color:var(--mut);margin:0 0 8px}
+ .opts{display:flex;gap:8px}
+ .opts button{flex:1;padding:12px 6px;font:inherit;font-size:14px;background:#fff;
+      border:1px solid var(--line);border-radius:8px;cursor:pointer}
+ .opts button:hover{border-color:var(--ac);background:#f0f7f7}
+ .opts button.on{border-color:var(--ac);background:var(--ac);color:#fff}
+ .opts button small{display:block;font-size:11px;opacity:.75;margin-top:2px}
+ .res{font-size:14px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px}
+ .nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px}
+ .nav button,.act button{padding:9px 14px;font:inherit;font-size:14px;background:#fff;
+      border:1px solid var(--line);border-radius:7px;cursor:pointer}
+ .nav button:disabled{opacity:.4;cursor:default}
+ .act{display:flex;gap:8px;margin:22px 0 10px}
+ .act button.primary{background:var(--ac);color:#fff;border-color:var(--ac)}
+ textarea{width:100%;height:130px;font:11.5px/1.5 ui-monospace,Menlo,monospace;padding:10px;
+      border:1px solid var(--line);border-radius:6px;background:#fff}
+ kbd{font:12px ui-monospace,monospace;background:#eee;border-radius:3px;padding:1px 5px}
+ .done h2{font-size:17px;margin:0 0 10px}
+</style></head><body><main>
+<h1>관련성 라벨링 <span style="color:#999;font-weight:400">v2</span></h1>
+<div class="lede">
+  두 개의 쉬운 질문으로 나눴습니다. 점수는 프로그램이 계산합니다.<br>
+  검증기 점수는 <b>표시하지 않습니다</b> — 판단이 끌려가지 않게 하기 위함입니다.
+</div>
+<div class="warn">
+  <b>저장 안내</b> — 이 창을 닫으면 진행분이 사라질 수 있습니다.
+  아무 때나 <b>[지금까지 저장]</b> 버튼으로 파일을 내려받을 수 있습니다.
+  중간에 그만두셔도 그때까지의 결과는 쓸 수 있습니다.
+</div>
+<div class="bar"><i id="pi"></i></div>
+<div class="top"><span id="pt"></span><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 키로 선택 · <kbd>←</kbd><kbd>→</kbd> 이동</span></div>
+<div id="app"></div>
+<div class="act">
+  <button class="primary" id="save">지금까지 저장 (.json 내려받기)</button>
+  <button id="toggle">JSON 직접 보기</button>
+</div>
+<div id="raw" style="display:none"><textarea id="out" readonly></textarea></div>
+</main>
+<script>
+const DATA = {"n": 70, "items": [{"id": "L001", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "미국 고용주의 약 39%가 웨어러블 건강 모니터링 인센티브를 제공하고 있습니다.", "dataset": "북미_웨어러블"}, {"id": "L002", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "일동후디스 하이뮨은 2022년 당뇨환자용 균형당뇨식과 일반인용 균형영양식 두 제품을 출시하며 한국 시니어 케어푸드 시장에 진출했다.", "dataset": "한국_HMR"}, {"id": "L003", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "아워홈은 2021년 '케어플러스' 브랜드를 출시하고 2023년부터 노인 저작 능력 개선용 HMR 연구 중", "dataset": "한국_HMR"}, {"id": "L004", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "웰리시스는 미국 심전도 서비스 전문업체와 '에스패치' 공급 계약을 체결하고 텍사스를 중심으로 미국 내 3개 주에 공급을 확대한다.", "dataset": "북미_웨어러블"}, {"id": "L005", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "뷰노의 AI 기반 흉부 엑스레이 진단 제품이 미국 식품의약국(FDA) 승인을 획득했으며, 북미 시장에서의 경쟁력을 바탕으로 추가 제품 승인(예: 뷰노메드 딥카스)이 예상됩니다.", "dataset": "북미_웨어러블"}, {"id": "L006", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "오뚜기 '3분 단백질' 제품으로 단백질 보충제 시장 진출", "dataset": "한국_HMR"}, {"id": "L007", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "친환경 포장재 시장은 지속 가능한 소비자 요구와 환경 친화적 소재 사용 증가로 인해 성장하고 있습니다.", "dataset": "유럽_포장재"}, {"id": "L008", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "북미 지역을 포함한 전 세계 인구 노령화와 만성 질환 유병률 증가로 인해 지속적인 건강 모니터링 솔루션 수요가 증가하고 있습니다.", "dataset": "북미_웨어러블"}, {"id": "L009", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "보험사 중 일부는 GPS 추적 기술 사용 시 보험료 할인 혜택을 제공한다", "dataset": "북미_반려동물"}, {"id": "L010", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "친환경 포장재 디자인 경쟁력 강화를 위해 iF 디자인 어워드와 같은 글로벌 인증 획득 사례 증가(리스튜디오의 페이퍼 몰드 기술 적용 사례)", "dataset": "유럽_포장재"}, {"id": "L011", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "벨리아 스마트링(VELIA Smart Ring)은 PPG 센서 탑재로 심박수, 혈중산소포화도, 체온, 혈압, 스트레스 지수 등 측정 가능", "dataset": "북미_웨어러블"}, {"id": "L012", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "매일유업의 '셀렉스'는 2025년 5월 기준 누적 매출 5000억 원을 돌파하며 한국 시니어 케어푸드 시장에서 경쟁력을 보임", "dataset": "한국_HMR"}, {"id": "L013", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "리스튜디오는 화장품 및 전자제품용 페이퍼 몰드·바이오 플라스틱 기반 친환경 포장재를 개발했으며, iF 디자인 어워드 2026 본상 수상으로 유럽 시장 디자인 경쟁력 입증. 아모레퍼시픽과 협업해 프리미엄 브랜드 이미지 유지를 위한 친환경 포장 솔루션 제공.", "dataset": "유럽_포장재"}, {"id": "L014", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "1.5Kg 이하 신선과일·채소 보호 포장·일회용 설탕·소금·소스류 포장·Horeca 용 식기류 사용이 금지됨.", "dataset": "유럽_포장재"}, {"id": "L015", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "식품 및 음료 부문이 2022년 43.8% 시장 점유율 기록, 유럽 B2B 친환경 포장재 수요 영향", "dataset": "유럽_포장재"}, {"id": "L016", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "방수 및 내구성 있는 구조로 다양한 기상 조건과 야외 활동에서도 신뢰할 수 있는 성능을 보장한다", "dataset": "북미_반려동물"}, {"id": "L017", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "일동후디스 하이뮨은 2020년 출시 후 2022년 누적 매출 3000억원, 2023년 4000억원 돌파하며 단백질 시장 1위 브랜드 기록", "dataset": "한국_HMR"}, {"id": "L018", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "CJ프레시웨이는 2015년 케어푸드 전문 브랜드 '헬씨누리'를 론칭하고 노인복지시설 급식 사업 및 이동급식 시장 확대를 통해 시장 점유율 강화 중", "dataset": "한국_HMR"}, {"id": "L019", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "2024년 글로벌 웨어러블 헬스케어 기기 시장 규모는 410.7억 달러(약 56.9조 원)로 북미가 최대 시장을 형성했다.", "dataset": "북미_웨어러블"}, {"id": "L020", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "2025년 기준 미국 진단용 웨어러블 의료기기 시장은 6,800만 명 이상의 활동적인 사용자를 보유", "dataset": "북미_웨어러블"}, {"id": "L021", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "매일유업은 2023년 균형 영양 조제 식품 3종, 혼합 음료 1종, 당뇨환자용 영양 조제 식품 1종 등 총 5종의 음료 형태 케어푸드 제품을 리뉴얼 출시함.", "dataset": "한국_HMR"}, {"id": "L022", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "캐나다 동물병원 100여 곳에 반려동물 진단 보조 솔루션 '엑스칼리버' 적용 예정", "dataset": "북미_반려동물"}, {"id": "L023", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "청각 보조 웨어러블 기기는 단순히 소리 증폭을 넘어 다기능 헬스기기로 발전하고 있다.", "dataset": "북미_웨어러블"}, {"id": "L024", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "EPR(확장된 생산자 책임제) 도입으로 EU 시장 수입자가 소재국 담당 기관에 등록 및 연간 폐기 비용 부담 의무화됨.", "dataset": "유럽_포장재"}, {"id": "L025", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "유럽 B2B 유통 시장에서 지속가능성은 B2B 구매 결정의 중요한 요소가 되고 있습니다.", "dataset": "유럽_포장재"}, {"id": "L026", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "미국 반려동물 시장 내 펫테크 기기는 코로나19 팬데믹 이후 더욱 증가했으며, 특히 스마트 건강 관리 기기에 대한 수요가 급증함.", "dataset": "북미_반려동물"}, {"id": "L027", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "보험사들은 예방적 진단(연례 혈액검사, 유전자 검사 등)을 보험 적용 대상에 추가하며, 사후 대응형에서 예방형 케어 모델로 전환하고 있습니다.", "dataset": "북미_반려동물"}, {"id": "L028", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "2023-2033년 펫테크 시장 전망 보고서에서 북미 지역 스마트 건강관리 기기 시장이 성장 추세로 전망됨", "dataset": "북미_반려동물"}, {"id": "L029", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "2020년 식품의약품안전처는 찌개류 HMR 조리 시 나트륨 배출 촉진을 위한 파, 양파 등 칼륨 함량 높은 재료를 함께 조리할 것을 권고", "dataset": "한국_HMR"}, {"id": "L030", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "일동후디스 하이뮨 프로틴 밸런스(하이뮨) 브랜드가 2023년 누적 매출 4000억원 달성", "dataset": "한국_HMR"}, {"id": "L031", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "2024년 미국 의료 기관의 43% 이상이 수술 후 회복 관리를 위해 웨어러블 모니터링 채택", "dataset": "북미_웨어러블"}, {"id": "L032", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "반려동물 3마리 중 1마리는 평생 실종될 것으로 예상되며(Animal Humane Society), 이에 따라 위치 확인 기술 수요가 증가하고 있습니다.", "dataset": "북미_반려동물"}, {"id": "L033", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "아워홈은 '케어플러스' 양념육 3종을 포함한 환자용 케어푸드 사업을 B2B 중심으로 전개하며, 암환자 및 고령자용 HMR 개발 중입니다.", "dataset": "한국_HMR"}, {"id": "L034", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "반려동물 위치 추적을 위한 GPS 지원 솔루션 수요 증가로 추적 장비 부문이 2026-2035년 사이 상당한 성장이 예상됩니다.", "dataset": "북미_반려동물"}, {"id": "L035", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "2021년 11월 서울아산병원 노년내과와 MOU 체결", "dataset": "한국_HMR"}, {"id": "L036", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "2030년부터 플라스틱 포장재에 최소 30~35% 재활용 함량 사용 의무화 및 PFAS·중금속 등 유해물질 제한 기준 명시", "dataset": "유럽_포장재"}, {"id": "L037", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "2025년 미국 진단용 웨어러블 의료기기 시장의 54% 이상이 AI 기반 분석 통합", "dataset": "북미_웨어러블"}, {"id": "L038", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "유럽을 중심으로 PFAS(과불화화합물) 사용 금지 법규가 식품 서비스 분야에서 시행되며 몰드 펄프 포장 시장 성장을 촉진", "dataset": "유럽_포장재"}, {"id": "L039", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "í í¸ë¼Pak ì¸í°ë´ì ë, ìì½ë¥´, ì¸í°ë´ì ë íì´í¼, ëª¬ë ê·¸ë£¹, ì¤ë¤ ìì´ ì½í¼ë ì´ì  ì´ë©°, ì´ë¤ì´ 2024ë  51% ì ìì¥ ì ì ì¨ì´ììµëë¤", "dataset": "유럽_포장재"}, {"id": "L040", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "SKT의 AI 기반 반려동물 진단 보조 솔루션 '엑스칼리버'가 북미 시장(캐나다 및 미국)에 진출하였으며, 캐나다 내 동물병원 100여 곳에 8월 중 제공될 예정입니다.", "dataset": "북미_반려동물"}, {"id": "L041", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "영국 자원협회는 2025년까지 음료 PET 병의 재활용 플라스틱 함량을 25%로 확대하는 목표를 설정했으며, 2030년까지 30%로 확대할 계획입니다.", "dataset": "유럽_포장재"}, {"id": "L042", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "Ecocool, 팔레트 화물용 종이 기반 보온커버 'Paperhood' 개발 (콜드체인 수송포장 재활용성 전환, 연구대상: 친환경 포장재, 목표시장: 유럽 B2B 유통 시장 관련)", "dataset": "유럽_포장재"}, {"id": "L043", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "불필요한 포장 감축 목표는 2030년까지 5%, 2035년까지 10%, 2040년까지 15%이며, 플라스틱 포장은 2030년까지 10%, 2035년까지 15%, 2040년까지 20% 감축 목표 제시.", "dataset": "유럽_포장재"}, {"id": "L044", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "SKT의 AI 기반 스마트 반려동물 건강관리 기기 '엑스칼리버'가 캐나다 동물병원 100여 곳에 8월 중 제공될 예정임.", "dataset": "북미_반려동물"}, {"id": "L045", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "Amcor plc (AMCR)는 Berry Global의 전략적 인수 이후 유럽 B2B 유통 시장에서 식품, 음료, 헬스케어 및 개인 관리 분야의 지속 가능한 포장 솔루션 영향력을 확장했습니다.", "dataset": "유럽_포장재"}, {"id": "L046", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "2028년 말까지 모든 재사용 가능 포장재에 일원화된 라벨 및 QR 코드 표기 의무화됨.", "dataset": "유럽_포장재"}, {"id": "L047", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "정식품의 '베지밀 5060 시니어 두유'는 출시 2년 만에 누적 판매량 1000만 개를 기록하며 시니어 두유 시장 개척", "dataset": "한국_HMR"}, {"id": "L048", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "일동후디스 하이뮨은 2020년 출시 후 2021년 국내 단백질 제품 시장 1위 브랜드로 등극, 2023년 기준 시장 점유율 및 매출 성장률에서 경쟁 우위", "dataset": "한국_HMR"}, {"id": "L049", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "규제기관의 커넥티드 다이아그노스틱스 패스트 트랙 패스웨이 구축으로 북미 시장 진입 장벽이 점차 낮아지고 있습니다.", "dataset": "북미_웨어러블"}, {"id": "L050", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "인도 정부는 2025년 7월 도입된 '플라스틱 폐기물 관리 규정'에서 포장재에 바코드 및 QR 코드 표시를 의무화해 시장 규제를 강화했습니다.", "dataset": "유럽_포장재"}, {"id": "L051", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "모바일 애플리케이션을 통한 반려동물 건강 모니터링 및 원격 수의사 상담 수요가 증가하고 있습니다.", "dataset": "북미_반려동물"}, {"id": "L052", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "2021년 미국 반려동물 시장 규모는 약 1236억 달러로, 펫테크 기기 중 웨어러블 헬스케어 기기가 가장 큰 비중을 차지함.", "dataset": "북미_반려동물"}, {"id": "L053", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "일동후디스 하이뮨은 2023년 누적 매출 4000억 원을 기록하며 한국 시니어 케어푸드 시장에서 대표 단백질 브랜드로 성장", "dataset": "한국_HMR"}, {"id": "L054", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "낙상 감지 기능은 갑작스러운 낙상 시 보호자나 구조 기관에 자동 알림을 전송하여 생명 구조의 첫 단추 역할을 합니다.", "dataset": "북미_웨어러블"}, {"id": "L055", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "현대그린푸드의 케어푸드 브랜드 '그리팅' 메디푸드 매출은 2022년 4월 출시 이후 매 분기 20% 이상씩 성장했다.", "dataset": "한국_HMR"}, {"id": "L056", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "오리온 '닥터유 프로'는 국내 최고 단백질 함량(40g) 제품으로 시장 진입", "dataset": "한국_HMR"}, {"id": "L057", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "현대그린푸드는 2023년 당뇨식단 24종과 암환자식단을 합쳐 '메디푸드(환자식)' 카테고리를 신설할 예정이며, 식단 수를 두 배 확대할 계획임", "dataset": "한국_HMR"}, {"id": "L058", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "미국 FDA는 2019년 일체형 웨어러블 인공 췌장을 획기적인 의료 기기로 지정함", "dataset": "북미_웨어러블"}, {"id": "L059", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "2030년까지 모든 포장재 디자인을 재활용 가능하게 설계해야 한다.", "dataset": "유럽_포장재"}, {"id": "L060", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "애플워치는 고혈압 알림 기능을 통해 이상 징후 감지 시 외부 혈압계 측정을 유도하며, 낙상 감지 및 응급 연락 기능을 지원합니다.", "dataset": "북미_웨어러블"}, {"id": "L061", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "지속 가능한 친환경 포장재 시장이 2034년까지 3,430억 달러 규모로 성장할 것으로 예상됩니다.", "dataset": "유럽_포장재"}, {"id": "L062", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "2023년 글로벌 포장 시장 규모는 2,956억 2천만 달러로 평가되었으며, 2032년까지 5,793억 5천만 달러에 이를 것으로 예상됩니다.", "dataset": "유럽_포장재"}, {"id": "L063", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "신세계푸드는 2020년 케어푸드 전문 브랜드 '이지밸런스'를 론칭해 연하식 제품을 개발함.", "dataset": "한국_HMR"}, {"id": "L064", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "아마존은 2024년 유럽 내 모든 주문에 재활용 가능한 포장재를 사용하는 시스템을 시작했다.", "dataset": "유럽_포장재"}, {"id": "L065", "topic": "시니어 가정간편식(HMR)", "target_market": "한국 시니어 케어푸드 시장", "text": "정식품의 '베지밀 5060 시니어 두유'는 출시 2년 만에 누적 판매량 1000만 개를 돌파했다.", "dataset": "한국_HMR"}, {"id": "L066", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "í í¸ë¼Pak ì¸í°ë´ì ëì´ 2024ë  14.1% ì ìì¥ ì ì ì¨ë¡ ì ëíê³ ììµëë¤", "dataset": "유럽_포장재"}, {"id": "L067", "topic": "친환경 포장재", "target_market": "유럽 B2B 유통 시장", "text": "호프만 네오팩(Hoffmann Neopac)은 100% 재활용 금속소재 캔을 개발했으며, 생산 과정에서 에너지 사용량 60%를 절감함.", "dataset": "유럽_포장재"}, {"id": "L068", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "미국 FDA의 OTC 보청기 카테고리 신설 이후 월마트, 코스트코 등 일반 소매점과 온라인을 통해 수백 달러대의 보청기가 판매되고 있다.", "dataset": "북미_웨어러블"}, {"id": "L069", "topic": "웨어러블 헬스케어 기기", "target_market": "북미 시니어 건강관리 시장", "text": "딥노이드의 AI 기반 흉부 엑스레이 진단 솔루션 '딥체스트'가 미국 시장 진출을 준비 중이며, 북미 시니어 건강관리 시장에서의 활용 가능성이 주목됩니다.", "dataset": "북미_웨어러블"}, {"id": "L070", "topic": "스마트 반려동물 건강관리 기기", "target_market": "북미 반려동물 오너 시장", "text": "SKT는 미국 수의영상장비 유통사 마이벳이미징과 ‘엑스칼리버’ 도입을 위한 업무협약(MOU)을 체결했다.", "dataset": "북미_반려동물"}]};
+const SCOPES = [
+  ["예",    "범위 안"],
+  ["부분",  "인접하지만 불일치"],
+  ["아니오", "범위 밖"],
+];
+// eval/label_scale.py 의 COMBINE 표와 반드시 동일해야 한다.
+const COMBINE = {
+  "예|예":5, "예|부분":4, "부분|예":4, "부분|부분":3,
+  "예|아니오":2, "부분|아니오":2, "아니오|예":2, "아니오|부분":1, "아니오|아니오":1,
+};
+const L = {};                       // id -> {topic_scope, market_scope}
+let idx = 0;
+
+try { const s = localStorage.getItem("relLabels_v2");
+      if (s) Object.assign(L, JSON.parse(s)); } catch(e){}
+
+function persist(){
+  try { localStorage.setItem("relLabels_v2", JSON.stringify(L)); } catch(e){}
+  refreshRaw();
+}
+
+function done(){ return DATA.items.filter(it => L[it.id] && L[it.id].topic_scope && L[it.id].market_scope).length; }
+
+function render(){
+  const n = DATA.items.length, d = done();
+  document.getElementById("pi").style.width = (d/n*100)+"%";
+  document.getElementById("pt").textContent = `${d} / ${n} 완료`;
+  if (idx >= n) return renderDone();
+
+  const it = DATA.items[idx];
+  const cur = L[it.id] || {};
+  const score = (cur.topic_scope && cur.market_scope)
+      ? COMBINE[cur.topic_scope+"|"+cur.market_scope] : null;
+
+  document.getElementById("app").innerHTML = `
+   <div class="card">
+    <div class="ctx">
+      <b>연구대상</b><span>${esc(it.topic)}</span>
+      <b>목표시장</b><span>${esc(it.target_market)}</span>
+    </div>
+    <div class="fact">${esc(it.text)}</div>
+
+    <div class="q">
+      <p><b>① 이 fact의 주제가 「${esc(it.topic)}」 범위 안입니까?</b></p>
+      <p class="hint">제품·서비스·산업의 종류만 보십시오. 지역은 다음 질문에서 봅니다.</p>
+      <div class="opts" data-k="topic_scope">${btns(cur.topic_scope)}</div>
+    </div>
+
+    <div class="q">
+      <p><b>② 이 fact의 지역·대상이 「${esc(it.target_market)}」 범위 안입니까?</b></p>
+      <p class="hint">어느 나라·지역이고 누구에 관한 이야기인지만 보십시오.</p>
+      <div class="opts" data-k="market_scope">${btns(cur.market_scope)}</div>
+    </div>
+
+    ${score ? `<div class="res">주제 <b>${cur.topic_scope}</b> · 지역·대상 <b>${cur.market_scope}</b>
+       → 관련성 <b>${score}점</b></div>` : ""}
+   </div>
+   <div class="nav">
+     <button id="prev" ${idx===0?"disabled":""}>← 이전</button>
+     <span style="font-size:13px;color:var(--mut)">${it.id} · ${idx+1} / ${n}</span>
+     <button id="next" ${idx>=n-1?"disabled":""}>다음 →</button>
+   </div>`;
+
+  document.querySelectorAll(".opts").forEach(box =>
+    box.querySelectorAll("button").forEach(b =>
+      b.onclick = () => pick(box.dataset.k, b.dataset.v)));
+  const p=document.getElementById("prev"), x=document.getElementById("next");
+  if(p) p.onclick=()=>{idx=Math.max(0,idx-1);render();};
+  if(x) x.onclick=()=>{idx++;render();};
+}
+
+function btns(sel){
+  return SCOPES.map(([v,d],i)=>
+    `<button data-v="${v}" class="${sel===v?"on":""}">${v}<small>${d}</small></button>`).join("");
+}
+
+function pick(key, val){
+  const it = DATA.items[idx];
+  L[it.id] = Object.assign({}, L[it.id], {[key]: val});
+  persist();
+  const c = L[it.id];
+  if (c.topic_scope && c.market_scope){
+    render();
+    setTimeout(()=>{ if(idx < DATA.items.length-1){ idx++; render(); } else render(); }, 480);
+  } else render();
+}
+
+function payload(){
+  return { labeled_at: new Date().toISOString(), axis: "relevance",
+    method: "분해 척도 v2 (주제 범위 + 지역·대상 범위 → 코드가 환산)",
+    labeler: "이후윤", n: done(),
+    labels: DATA.items.map(it => {
+      const c = L[it.id] || {};
+      const s = (c.topic_scope && c.market_scope) ? COMBINE[c.topic_scope+"|"+c.market_scope] : null;
+      return { id: it.id, dataset: it.dataset, text: it.text,
+               topic_scope: c.topic_scope ?? null, market_scope: c.market_scope ?? null,
+               human_relevance: s };
+    })};
+}
+function refreshRaw(){ const o=document.getElementById("out"); if(o) o.value=JSON.stringify(payload(),null,1); }
+
+document.getElementById("save").onclick = () => {
+  const blob = new Blob([JSON.stringify(payload(),null,1)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "relevance_labels.json";
+  document.body.appendChild(a); a.click(); a.remove();
+};
+document.getElementById("toggle").onclick = () => {
+  const r=document.getElementById("raw");
+  r.style.display = r.style.display==="none" ? "block" : "none"; refreshRaw();
+};
+
+function renderDone(){
+  const d = done();
+  document.getElementById("app").innerHTML = `
+    <div class="card done"><h2>라벨링 완료 — ${d} / ${DATA.items.length}건</h2>
+      <p>아래 <b>[지금까지 저장]</b> 을 눌러 <code>relevance_labels.json</code> 을 내려받으신 뒤,
+         <code>multi-agent-system/eval/label/</code> 로 옮겨 주십시오.</p>
+      <p style="font-size:14px;color:var(--mut)">검증기·상위 모델 점수와의 비교는 그 다음에 하겠습니다.</p>
+      <div class="nav"><button id="back">← 처음부터 다시 보기</button></div>
+    </div>`;
+  document.getElementById("back").onclick = ()=>{idx=0;render();};
+  refreshRaw();
+}
+
+function esc(s){ return String(s ?? "").replace(/[&<>"]/g,
+  c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+document.addEventListener("keydown", e=>{
+  const it = DATA.items[idx]; if(!it) return;
+  const c = L[it.id] || {};
+  if (["1","2","3"].includes(e.key)){
+    const v = SCOPES[+e.key-1][0];
+    pick(c.topic_scope ? "market_scope" : "topic_scope", v);
+  } else if (e.key==="ArrowLeft" && idx>0){ idx--; render(); }
+  else if (e.key==="ArrowRight" && idx<DATA.items.length-1){ idx++; render(); }
+});
+render(); refreshRaw();
+</script></body></html>
