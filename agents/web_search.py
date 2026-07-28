@@ -166,6 +166,108 @@ def _extract_tavily(url: str, max_chars: int = PAGE_FETCH_MAX_CHARS) -> Optional
         return None
 
 
+MOJIBAKE_PAT = re.compile(
+    # UTF-8 한글(EA~ED 시작)을 latin-1로 읽으면 'ê ë ì í' + 라틴확장 문자가 이어진다.
+    # 정상적인 한국어·영어 문서에는 이 조합이 나타나지 않는다.
+    r"[êëìí][\u0080-\u00bf\u00c0-\u00ff]"
+    # 다른 CJK/키릴 계열이 잘못 읽힌 흔적
+    r"|Ã[\u0080-\u00bf\u00a0-\u00ff]"
+    r"|â€[\u0099\u009c\u009d\u0093\u0094]"
+)
+
+
+def looks_mojibake(text: str, threshold: float = 0.005) -> bool:
+    """문자 인코딩이 깨진 텍스트인지 판정한다.
+
+    2026-07-28 추가. gminsights.com/ko 페이지가 Content-Type에 charset을 주지 않아
+    requests가 RFC 2616 기본값(ISO-8859-1)으로 UTF-8 한글을 읽었고, 그 결과
+    "테트라Pak 인터내셔널"이 "í í¸ë¼Pak ì¸í°ë´ì ë"로 깨졌다.
+
+    피해가 수집 단계에서 멈추지 않았다는 점이 중요하다:
+      · 깨진 글자에서 LLM이 없는 회사명(`Ìndusanal Inc.`)을 만들어냈다
+      · 검증기는 "fact가 원문에 있는가"만 보므로, 원문도 fact도 함께 깨져 있으면
+        '일치'로 판정한다 — 실제로 근거지지도 5점·관련성 5점으로 채택됐다
+      · 문자열 유사도가 0에 가까워져 중복 제거(0.85 임계)가 무력화됐다.
+        같은 사실이 '깨진 판'과 '정상 판'으로 두 번 저장됐다
+
+    그래서 수집 계층만 고치지 않고 이 판정기를 추출·검증 앞단에도 둔다.
+    charset을 틀리게 주는 사이트는 언제든 또 나온다.
+
+    threshold: 전체 길이 대비 깨짐 신호 비율. 0으로 두지 않는 이유는 정상 문서에도
+    특수문자가 우연히 섞일 수 있어서다. 0.005는 1,000자에 5회 이상이면 깨짐으로 본다.
+    """
+    if not text:
+        return False
+    hits = len(MOJIBAKE_PAT.findall(text))
+    if hits == 0:
+        return False
+    return hits / max(len(text), 1) >= threshold
+
+
+def decode_html(resp) -> str:
+    """HTTP 응답 본문을 문자셋을 제대로 골라 문자열로 만든다.
+
+    `resp.text`를 그대로 쓰면 안 되는 이유: Content-Type에 charset이 없을 때
+    requests는 ISO-8859-1로 가정한다(RFC 2616). 한국어 페이지 상당수가 charset을
+    헤더에 넣지 않고 HTML <meta>에만 넣으므로, 그대로 두면 한글이 전부 깨진다.
+
+    순서대로 시도한다 — 앞쪽이 더 신뢰할 수 있는 근거다:
+      1) 헤더의 charset (단, ISO-8859-1은 '기본값일 뿐'이므로 신뢰하지 않는다)
+      2) HTML <meta charset> 선언
+      3) UTF-8 (오늘 웹의 사실상 표준)
+      4) charset_normalizer 자동 탐지
+      5) cp949 (charset 없는 한국 레거시 페이지)
+      6) latin-1 (실패하지 않는 마지막 수단 — 여기까지 오면 모지바케 필터가 잡는다)
+    """
+    raw: bytes = resp.content
+    if not raw:
+        return ""
+
+    candidates: list[str] = []
+
+    header_enc = requests.utils.get_encoding_from_headers(resp.headers)
+    if header_enc and header_enc.lower() not in ("iso-8859-1", "latin-1"):
+        candidates.append(header_enc)
+
+    # <meta charset="..."> / <meta http-equiv="Content-Type" content="...charset=...">
+    head = raw[:4096].decode("ascii", "ignore")
+    for m in re.finditer(r'charset=["\']?\s*([\w\-]+)', head, re.IGNORECASE):
+        candidates.append(m.group(1))
+
+    candidates.append("utf-8")
+
+    try:
+        from charset_normalizer import from_bytes
+        best = from_bytes(raw).best()
+        if best and best.encoding:
+            candidates.append(best.encoding)
+    except Exception:  # noqa: BLE001 — 탐지 실패가 수집을 막아선 안 된다
+        pass
+
+    candidates += ["cp949", "latin-1"]
+
+    seen: set[str] = set()
+    for enc in candidates:
+        key = enc.lower().replace("_", "-")
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            text = raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+        if looks_mojibake(text):
+            # 디코딩은 성공했지만 결과가 깨졌다 — 다음 후보로 넘어간다.
+            # latin-1은 어떤 바이트도 받아들이므로 이 검사가 없으면 항상 여기서 멈춘다.
+            continue
+        if enc.lower() != "utf-8":
+            log.info(f"  [인코딩] {enc} 로 해석 (헤더값: {header_enc or '없음'})")
+        return text
+
+    log.info(f"  [인코딩] 후보 {len(seen)}개 모두 깨짐 — latin-1로 강제 해석")
+    return raw.decode("latin-1", "replace")
+
+
 def _fetch_page_text_direct(url: str, max_chars: int) -> Optional[str]:
     """정규식 기반 간이 추출(무료·빠른 경로).
 
@@ -188,7 +290,7 @@ def _fetch_page_text_direct(url: str, max_chars: int) -> Optional[str]:
                 f"  [읽기건너뜀] {url} (상태 {resp.status_code}, {content_type or '타입 없음'})"
             )
             return None
-        html = resp.text
+        html = decode_html(resp)
         html = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.IGNORECASE)
         html = re.sub(r"<style[\s\S]*?</style>", " ", html, flags=re.IGNORECASE)
         text = re.sub(r"<[^>]+>", " ", html)

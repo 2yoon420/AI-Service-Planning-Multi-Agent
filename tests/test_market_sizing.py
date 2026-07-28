@@ -128,3 +128,97 @@ def test_작은_수는_보조표기를_붙이지_않는다():
 
 def test_계산_불가는_그대로_표기된다():
     assert _fmt_num(None, "USD") == "계산 불가"
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  통화 환산 (2026-07-28 추가) — 한국 시장 실행에서 드러난 결함
+#
+#  사고: 배포 서버에서 "시니어 가정간편식(HMR) / 한국 시니어 케어푸드 시장"을 돌렸더니
+#  기획서 초안에 이렇게 실렸다.
+#
+#      TAM=2,500,000,000,000 USD [원문 2.5e+04억 x 100,000,000]
+#      근거: "국내 케어푸드 시장규모는 2021년 기준 약 2조 5000억원으로 추산"
+#
+#  원문은 "2조 5000억 원"이고 배율 계산도 맞다. 틀린 것은 통화다 — 2.5조 원은 약
+#  18억 달러인데 2.5조 달러(세계 GDP의 2% 이상)로 찍혔다. 1,380배 과대.
+#
+#  원인 두 가지:
+#   ① 스키마가 배율(tam_scale)은 물어보면서 통화는 묻지 않았고 unit="USD"가 하드코딩됨
+#   ② 상식 검산이 하한(100만 USD)만 봤다. 과대 방향은 아무도 막지 않았다
+#
+#  왜 이제야 드러났나: 유럽·북미 실행은 출처가 전부 달러였다. 한국어 1차 자료를
+#  쓰는 순간 즉시 나타났다. 도메인을 넓히지 않으면 못 찾는 종류의 결함이다.
+#  (NUMCoT 논문이 지적한 한자문화권 수 체계 문제와 같은 계열이다.)
+# ══════════════════════════════════════════════════════════════════════
+
+from agents.market_research import (  # noqa: E402
+    _FX_TO_USD,
+    _TAM_SANITY_MAX_USD,
+    _TAM_SANITY_MIN_USD,
+    currency_to_usd,
+    scale_to_multiplier,
+)
+
+
+def test_한국_HMR_사고를_재현하고_고쳐진_것을_확인한다():
+    """실제 사고 값으로 회귀를 막는다."""
+    scaled = 2.5e4 * scale_to_multiplier("억")      # "2조 5000억" = 25,000억
+    assert scaled == 2.5e12                          # 원화로는 정확하다
+
+    usd, note = currency_to_usd(scaled, "KRW")
+    assert 1.5e9 < usd < 2.5e9, f"2.5조 원은 약 18억 달러여야 한다 (실제 {usd:,.0f})"
+    assert "KRW → USD" in note
+    assert usd < _TAM_SANITY_MAX_USD                 # 이제 상한 검산을 통과한다
+
+
+def test_통화를_틀리면_상한_검산에_걸린다():
+    """수정 전 동작. 이 값이 상한을 넘지 않으면 검산이 무의미해진다."""
+    wrong, _ = currency_to_usd(2.5e12, "USD")
+    assert wrong > _TAM_SANITY_MAX_USD
+
+
+def test_통화_불명이면_USD로_가정하지_않고_경고한다():
+    """'불명'을 USD로 처리하는 것이 바로 이 결함의 원인이었다."""
+    usd, note = currency_to_usd(1000.0, "불명")
+    assert usd == 1000.0, "환산하지 않고 원문 숫자를 그대로 넘긴다"
+    assert "⚠️" in note and "USD로 가정하지 않고" in note
+
+
+def test_USD는_환산하지_않고_군더더기_문구도_붙이지_않는다():
+    usd, note = currency_to_usd(1234.0, "USD")
+    assert usd == 1234.0
+    assert note == ""
+
+
+@pytest.mark.parametrize("currency", ["KRW", "EUR", "JPY", "CNY", "GBP"])
+def test_지원_통화는_모두_환산율이_있다(currency):
+    usd, note = currency_to_usd(100.0, currency)
+    assert usd != 100.0 or currency == "USD"
+    assert note, "환산했으면 무엇을 어떻게 바꿨는지 초안에 남아야 한다"
+
+
+def test_모르는_통화는_조용히_넘기지_않고_경고한다():
+    usd, note = currency_to_usd(500.0, "INR")     # 환율 표에 없다
+    assert usd == 500.0
+    assert "⚠️" in note and "INR" in note
+
+
+def test_환율표에_USD가_1로_들어있다():
+    """USD 자기환산이 1이 아니면 달러 출처가 전부 망가진다."""
+    assert _FX_TO_USD["USD"] == 1.0
+
+
+def test_원화_환율_방향이_뒤집히지_않았다():
+    """1/1380 대신 1380을 넣는 실수를 막는다. 방향이 뒤집히면 2.5조 원이
+    3,450조 달러가 된다."""
+    assert _FX_TO_USD["KRW"] < 1, "1원은 1달러보다 싸다"
+    assert 0.0005 < _FX_TO_USD["KRW"] < 0.002
+
+
+def test_상한과_하한이_모순되지_않는다():
+    assert _TAM_SANITY_MIN_USD < _TAM_SANITY_MAX_USD
+
+
+def test_상한이_세계_GDP_규모_아래에_있다():
+    """상한이 너무 크면 아무것도 못 잡는다. 세계 GDP는 약 100조 USD다."""
+    assert _TAM_SANITY_MAX_USD <= 1e13

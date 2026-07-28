@@ -20,9 +20,11 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from agents.verification import filter_relevant_chunks, verify_facts_batch
-from agents.web_search import chunk_text, search_web
+from agents.web_search import chunk_text, search_web, looks_mojibake
 from fact_store.schema import Fact, MarketSizing, SourceTier
 from fact_store.store import init_db, save_fact_if_new, save_market_sizing
+
+from typing import Optional
 
 import logging
 
@@ -57,10 +59,34 @@ FACTS_SCHEMA = {
         "schema": {
             "type": "object",
             "properties": {
+                # 2026-07-28 변경 — 문자열 배열에서 객체 배열로 바꿨다.
+                #
+                # 원인: fact를 "사실 하나당 한 줄"로만 뽑게 하자 지역·주체가 문장에서
+                #   떨어져 나갔다. 사람 라벨 실험에서 fact 70건 중 34건(49%)에 지역어가
+                #   아예 없었다. 예: "2030년까지 모든 포장재 디자인을 재활용 가능하게
+                #   설계해야 한다" — 어느 나라 규제인지 알 수 없다.
+                # 결과: (a) 사람이 관련성을 판정할 수 없다 (b) 관련성 채점에서 원문을
+                #   제거한 뒤(결함 A 수정) 검증기도 판정 근거를 잃는다 (c) 기획서 독자가
+                #   그 근거가 자기 시장 이야기인지 확인할 수 없다.
+                # 참고: Fact 스키마에는 region 필드가 원래 있었지만 아무도 채우지 않아
+                #   배포 데이터 340건 전부 None이었다. 죽은 필드를 살린다.
                 "facts": {
                     "type": "array",
-                    "items": {"type": "string"},
-                    "description": "이 검색결과 스니펫에서 뽑아낸, 사실 하나당 한 줄로 압축된 문장들. 근거가 될 만한 내용이 없으면 빈 배열.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "사실 하나를 한 줄로. 이 문장만 따로 읽어도 '어디의·누구에 관한 이야기인지' 알 수 있게 지역·주체를 문장 안에 포함할 것. 예) (나쁨) '2030년까지 재활용 가능하게 설계해야 한다' → (좋음) 'EU는 2030년까지 역내 유통 포장재를 재활용 가능하게 설계하도록 의무화한다'",
+                            },
+                            "region": {
+                                "type": "string",
+                                "description": "이 사실이 어느 지역에 관한 것인지 원문 근거대로. 예) '유럽', 'EU', '한국', '미국', '북미', '영국', '인도', '글로벌'. 원문에 지역 근거가 없으면 '불명'. 추측해서 목표시장 이름을 적지 말 것 — 그러면 무관한 fact가 관련 있어 보이게 된다.",
+                            },
+                        },
+                        "required": ["text", "region"],
+                    },
+                    "description": "이 검색결과에서 뽑아낸 사실들. 근거가 될 만한 내용이 없으면 빈 배열.",
                 }
             },
             "required": ["facts"],
@@ -95,6 +121,16 @@ MARKET_SIZING_SCHEMA = {
                              "thousand", "million", "billion", "trillion"],
                     "description": "tam_value에 곱해야 할 배율 단어를 원문 표기 그대로. 예) '116.13억 달러' -> '억', '$505B' -> 'billion', '5,793만 달러' -> '만', '3,200달러' -> '없음'. 원문에 배율 단어가 없으면 '없음'.",
                 },
+                # 2026-07-28 추가 — 통화를 묻지 않아 "2조 5000억 원"이 "2.5조 USD"로
+                # 찍히는 사고가 났다(한국 시니어 HMR 실행). 배율(억/조)은 정확히 처리했지만
+                # 통화 개념이 코드에 아예 없어 unit="USD"가 하드코딩돼 있었다.
+                # 유럽·북미 실행은 출처가 전부 달러여서 이 결함이 드러날 일이 없었다.
+                # 배율과 같은 원칙을 적용한다 — LLM은 원문 표기만 보고하고 환산은 코드가 한다.
+                "tam_currency": {
+                    "type": "string",
+                    "enum": ["USD", "KRW", "EUR", "JPY", "CNY", "GBP", "불명"],
+                    "description": "tam_value가 어느 통화로 적혀 있는지 원문 기준. 예) '2조 5000억 원' -> 'KRW', '116.13억 달러' -> 'USD', '505억 유로' -> 'EUR', '3조 엔' -> 'JPY'. 원화·달러 등이 명시되지 않아 판단할 수 없으면 '불명'. 추측해서 USD라고 답하지 말 것 — 통화를 틀리면 기획서의 시장 규모가 수백~수천 배 틀어진다.",
+                },
                 "tam_year": {
                     "type": "string",
                     "description": "이 TAM 수치가 어느 연도 기준인지 (예: '2025', '2024~2030 평균' 등). 실측치가 아니라 예측치를 쓴 경우 '(예측치)'를 함께 표기할 것 (예: '2031 (예측치)').",
@@ -124,6 +160,7 @@ MARKET_SIZING_SCHEMA = {
                 "tam_found",
                 "tam_value",
                 "tam_scale",
+                "tam_currency",
                 "tam_year",
                 "tam_source_snippet",
                 "sam_ratio",
@@ -156,6 +193,46 @@ _SCALE_MULTIPLIER: dict[str, float] = {
 # 나오면 LLM이 배율을 잘못 읽었을 가능성이 높다고 보고 경고를 남긴다.
 # 값을 조용히 버리지 않는 이유: 무엇이 왜 이상한지 문서에 드러나야 사람이 판단할 수 있다.
 _TAM_SANITY_MIN_USD = 1_000_000.0
+
+# 상한 검산 (2026-07-28 추가). 하한만 검사하던 탓에 "2.5조 USD"라는 과대 오류를
+# 그냥 통과시켰다. 세계 GDP가 약 100조 USD이므로, 단일 국가·권역의 특정 제품 시장이
+# 1조 USD를 넘는 일은 사실상 없다. 이 선을 넘으면 통화나 배율을 잘못 읽은 것이다.
+# 이 값도 근거 없는 임의값이다 — 설계값 레지스터에 등재한다.
+_TAM_SANITY_MAX_USD = 1_000_000_000_000.0
+
+# 통화 환산율 (1 단위 = ? USD). 2026-07 기준 대략치로 고정한다.
+#
+# 왜 고정 환율인가: 환율 API를 붙이면 실행 시점마다 기획서의 시장 규모가 달라져
+# 재현이 불가능해진다. 시장 규모 추정의 정밀도는 애초에 ±수십 %이므로 환율 변동
+# 몇 %는 유의미하지 않다. 대신 이 값이 고정값임을 초안에 명시해 사람이 판단할 수
+# 있게 한다.
+#
+# 한계: 이 표는 근거 없는 임의값이고, 과거 연도 기준 시장 규모에 현재 환율을
+# 적용하는 것도 엄밀하지 않다(2021년 원화 시장 규모에 2026년 환율을 곱한다).
+# 정확히 하려면 연도별 평균 환율이 필요하다. 설계값 레지스터에 등재한다.
+_FX_TO_USD: dict[str, float] = {
+    "USD": 1.0,
+    "KRW": 1 / 1380,
+    "EUR": 1.08,
+    "JPY": 1 / 155,
+    "CNY": 1 / 7.2,
+    "GBP": 1.27,
+}
+
+
+def currency_to_usd(value: float, currency: str | None) -> tuple[float, str]:
+    """원문 통화 금액을 USD로 환산한다. (환산값, 사람이 읽을 설명) 을 돌려준다.
+
+    통화를 모를 때(`불명`) USD로 가정하지 않는다 — 그 가정이 바로 이 결함의 원인이었다.
+    대신 환산하지 않고 넘기면서 경고 문구를 만들어, 초안에 그 사실이 드러나게 한다."""
+    if not currency or currency in ("불명", "USD"):
+        if currency == "불명":
+            return value, "⚠️ 통화 불명 — USD로 가정하지 않고 원문 숫자를 그대로 씀"
+        return value, ""
+    rate = _FX_TO_USD.get(currency)
+    if rate is None:
+        return value, f"⚠️ 환산율을 모르는 통화({currency}) — 원문 숫자를 그대로 씀"
+    return value * rate, f"[{currency} → USD, 환율 {1/rate:,.0f}{currency}/USD 고정]"
 
 
 def scale_to_multiplier(scale: str | None) -> float:
@@ -191,11 +268,29 @@ TAM으로 쓸 만한 수치가 facts에 전혀 없으면 tam_found를 false로 �
 
 매우 중요 — 단위 환산은 하지 마세요:
 - tam_value에는 **원문에 적힌 숫자를 그대로** 넣고, 배율 단어는 tam_scale에 따로 넣으세요.
-  올바른 예) "116.13억 달러" -> tam_value=116.13, tam_scale="억"
-  올바른 예) "$505B"        -> tam_value=505,    tam_scale="billion"
+  올바른 예) "116.13억 달러" -> tam_value=116.13, tam_scale="억",      tam_currency="USD"
+  올바른 예) "$505B"        -> tam_value=505,    tam_scale="billion", tam_currency="USD"
   틀린 예)  "116.13억 달러" -> tam_value=11613000000  (직접 환산하지 마세요)
   틀린 예)  "116.13억 달러" -> tam_value=116.13, tam_scale="없음"  (배율을 빠뜨렸습니다)
 - 실제 곱셈은 프로그램이 수행하므로, 당신은 원문을 정확히 옮기기만 하면 됩니다.
+
+매우 중요 — 통화(tam_currency)를 반드시 원문 그대로 보고할 것:
+- 이 항목을 틀리면 기획서의 시장 규모가 수백~수천 배 틀어집니다. 실제로 사고가 났습니다 —
+  "2조 5000억 원"을 USD로 처리해 "2.5조 달러"(세계 GDP의 2%)가 기획서에 실렸습니다.
+- 원문에 "원", "억 원", "조 원", "₩", "KRW"가 있으면 tam_currency="KRW" 입니다.
+  "달러", "$", "USD" 이면 "USD", "유로"/"€" 이면 "EUR", "엔"/"¥" 이면 "JPY" 입니다.
+- 통화가 원문에 명시되지 않아 판단할 수 없으면 "불명"으로 두십시오.
+  추측해서 "USD"라고 답하지 마십시오 — 프로그램은 "불명"일 때 환산하지 않고 경고를 남깁니다.
+
+  올바른 예) "2조 5000억 원"     -> tam_value=2.5,   tam_scale="조", tam_currency="KRW"
+  올바른 예) "국내 시장 3조원"    -> tam_value=3,     tam_scale="조", tam_currency="KRW"
+  올바른 예) "1,200억 엔"        -> tam_value=1200,  tam_scale="억", tam_currency="JPY"
+  틀린 예)  "2조 5000억 원"     -> tam_currency="USD"   (원화를 달러로 보고했습니다)
+  틀린 예)  "시장 규모 5,000억"  -> tam_currency="USD"   (통화가 없으면 "불명"입니다)
+
+  주의) "2조 5000억 원"처럼 두 배율이 겹친 표기는 큰 단위로 통일해 옮기십시오.
+        2조 5000억 = 2.5조 이므로 tam_value=2.5, tam_scale="조" 입니다.
+        tam_value=25000, tam_scale="억" 으로 옮겨도 같은 값이므로 둘 다 맞습니다.
 
 매우 중요 — TAM 기준 연도 선택:
 - fact 목록에 여러 연도의 시장 규모 수치가 있다면(예: "2024년 X달러", "2031년 Y달러로 성장 전망"),
@@ -276,23 +371,39 @@ def calculate_market_sizing(
         raw_value = float(topdown.get("tam_value", 0) or 0)
         scale_word = topdown.get("tam_scale", "없음")
         multiplier = scale_to_multiplier(scale_word)
-        tam_topdown = raw_value * multiplier
+        scaled = raw_value * multiplier
+
+        # 통화 환산도 코드가 한다(2026-07-28). 배율은 정확히 처리하면서 통화는 묻지
+        # 않아, "2조 5000억 원"이 "2.5조 USD"로 찍혔다(1,400배 과대).
+        currency = topdown.get("tam_currency", "불명")
+        tam_topdown, fx_note = currency_to_usd(scaled, currency)
         sam_topdown = tam_topdown * topdown["sam_ratio"]
         som_topdown = sam_topdown * topdown["som_ratio"]
 
         scale_note = "" if multiplier == 1.0 else f" [원문 {raw_value:,.4g}{scale_word} x {multiplier:,.0f}]"
+        origin = "" if currency in ("USD", "불명") else f" (원문 {scaled:,.0f} {currency})"
         assumptions.append(
-            f"[Top-down] TAM={tam_topdown:,.0f} USD{scale_note} ({topdown['tam_year']} 기준, 근거: "
+            f"[Top-down] TAM={tam_topdown:,.0f} USD{scale_note}{origin}"
+            f"{(' ' + fx_note) if fx_note else ''} ({topdown['tam_year']} 기준, 근거: "
             f"\"{topdown['tam_source_snippet']}\")"
         )
 
-        # 상식 검산 — 권역/국가 시장 TAM이 100만 USD 미만이면 배율 해석이 틀렸을 공산이 크다.
+        # 상식 검산 — 아래로도 위로도 본다.
+        # 하한만 검사하던 동안 "2.5조 USD"라는 과대 오류가 그대로 통과했다.
         # 값을 지우지 않고 경고를 남겨, 사람이 초안에서 바로 알아볼 수 있게 한다.
         if 0 < tam_topdown < _TAM_SANITY_MIN_USD:
             assumptions.append(
                 f"⚠️ [검산 경고] TAM이 {tam_topdown:,.0f} USD로 계산되었습니다. 국가·권역 단위 "
                 f"시장 규모로는 비정상적으로 작습니다(기준 {_TAM_SANITY_MIN_USD:,.0f} USD). "
                 f"원문의 배율 단위(억/billion 등)를 잘못 읽었을 가능성이 있으니 "
+                f"근거 문장을 직접 확인하십시오."
+            )
+        elif tam_topdown > _TAM_SANITY_MAX_USD:
+            assumptions.append(
+                f"⚠️ [검산 경고] TAM이 {tam_topdown:,.0f} USD로 계산되었습니다. 세계 GDP가 "
+                f"약 100조 USD인데 단일 국가·권역의 특정 제품 시장이 "
+                f"{_TAM_SANITY_MAX_USD:,.0f} USD를 넘는 것은 사실상 불가능합니다. "
+                f"통화({currency})나 배율({scale_word})을 잘못 읽었을 가능성이 높으니 "
                 f"근거 문장을 직접 확인하십시오."
             )
         assumptions.append(
@@ -405,6 +516,18 @@ def _is_no_info_statement(text: str) -> bool:
     return any(pattern in text for pattern in NO_INFO_PATTERNS)
 
 
+def _is_unusable_fact(text: str) -> bool:
+    """fact로 쓸 수 없는 문장을 코드 레벨에서 걸러낸다.
+
+    2026-07-28 확장 — 기존의 "정보 없음" 메타발언 외에 **인코딩이 깨진 문장**을 추가했다.
+    실제 사고: 출처 페이지가 charset을 주지 않아 본문이 모지바케가 됐고, LLM이 깨진
+    글자를 회사명으로 해석해 `Ìndusanal Inc.`, `Monoco Group` 같은 실재하지 않는
+    기업을 시장 점유율 순위표에 넣었다. 수집 계층(decode_html)을 고쳤지만, charset을
+    틀리게 주는 사이트는 또 나오므로 추출 단계에서 한 번 더 막는다.
+    """
+    return _is_no_info_statement(text) or looks_mojibake(text)
+
+
 SIMPLIFY_QUERY_SCHEMA = {
     "type": "json_schema",
     "json_schema": {
@@ -444,7 +567,40 @@ def simplify_query(client: OpenAI, question: str) -> str:
     return parsed["query"]
 
 
-def extract_facts(client: OpenAI, question: str, result: dict, topic: str, target_market: str) -> list[str]:
+# 지역 표기를 정규화한다. LLM이 "EU", "유럽연합", "Europe"을 섞어 쓰므로 그대로 두면
+# 같은 지역이 다른 값으로 저장되고, 나중에 지역 일치 판정이 무의미해진다.
+# 목록에 없는 표기는 버리지 않고 원문 그대로 남긴다 — 모르는 지역을 "불명"으로 뭉치면
+# 정보가 사라진다.
+_REGION_CANON: dict[str, str] = {
+    "eu": "유럽", "유럽연합": "유럽", "europe": "유럽", "european union": "유럽", "european": "유럽",
+    "us": "미국", "usa": "미국", "u.s.": "미국", "united states": "미국", "america": "미국",
+    "north america": "북미", "북아메리카": "북미",
+    "korea": "한국", "south korea": "한국", "국내": "한국", "대한민국": "한국",
+    "uk": "영국", "united kingdom": "영국", "britain": "영국",
+    "japan": "일본", "china": "중국", "india": "인도",
+    "global": "글로벌", "worldwide": "글로벌", "전 세계": "글로벌", "전세계": "글로벌", "세계": "글로벌",
+    "unknown": "불명", "n/a": "불명", "없음": "불명", "": "불명",
+}
+
+
+def normalize_region(region: Optional[str]) -> Optional[str]:
+    """LLM이 보고한 지역 표기를 통일한다. 판단 불가면 '불명'을 돌려준다.
+
+    None이 아니라 '불명'을 쓰는 이유: None은 "아직 안 채웠다"와 구분되지 않는다.
+    배포 데이터 340건이 전부 None이었던 것이 정확히 그 문제였다 — 채우려 했지만 못
+    채운 것인지, 애초에 채우는 코드가 없었던 것인지 데이터만 봐서는 알 수 없었다.
+    """
+    if region is None:
+        return None
+    v = region.strip()
+    if not v:
+        return "불명"
+    return _REGION_CANON.get(v.lower(), v)
+
+
+def extract_facts(
+    client: OpenAI, question: str, result: dict, topic: str, target_market: str
+) -> list[tuple[str, Optional[str]]]:
     """검색결과 하나(제목+본문)에서 fact 문장들을 추출한다.
     result['content']는 가능하면 페이지 실제 본문(fetch_full_text=True일 때), 없으면 스니펫.
 
@@ -475,7 +631,26 @@ def extract_facts(client: OpenAI, question: str, result: dict, topic: str, targe
   일반 의료기기, 무관한 질병 통계)는 제외하세요.
 - 쓸만한 내용이 없으면 반드시 빈 배열(facts: [])만 반환하세요.
 - "정보가 없습니다", "포함되어 있지 않습니다" 같이 정보 부재를 설명하는 문장 자체를
-  fact로 넣지 마세요. 그런 문장은 사실이 아니라 메타 발언입니다."""
+  fact로 넣지 마세요. 그런 문장은 사실이 아니라 메타 발언입니다.
+
+매우 중요 — 각 fact는 혼자서도 읽히게 쓰세요:
+- fact 문장은 나중에 원문 없이 따로 읽힙니다. 그러므로 **어디의·누구에 관한 이야기인지**를
+  문장 안에 넣어야 합니다. 지역·주체를 빼면 그 fact는 근거로 쓸 수 없게 됩니다.
+
+  (나쁨) "2030년까지 모든 포장재 디자인을 재활용 가능하게 설계해야 한다"
+         → 어느 나라 규제인지 알 수 없습니다.
+  (좋음) "EU는 2030년까지 역내 유통 포장재를 재활용 가능하게 설계하도록 의무화한다"
+
+  (나쁨) "불필요한 포장 감축 목표는 2030년까지 5%, 2035년까지 10%이다"
+         → 누구의 목표인지 알 수 없습니다.
+  (좋음) "EU PPWR은 불필요한 포장 감축 목표를 2030년까지 5%, 2035년까지 10%로 제시한다"
+
+  (나쁨) "방수 및 내구성 있는 구조로 야외 활동에서도 신뢰할 수 있다"
+         → 무엇에 대한 설명인지 알 수 없습니다. 제품·주체를 밝히거나 아예 넣지 마세요.
+
+- region 필드에는 그 사실이 **어느 지역에 관한 것인지 원문 근거대로** 적으세요.
+  원문에 지역 근거가 없으면 "불명"으로 두십시오. 목표시장({target_market})을 그대로
+  베껴 적지 마십시오 — 그러면 무관한 fact가 관련 있어 보이게 됩니다."""
 
     response = client.chat.completions.create(
         model=HEAVY_MODEL,
@@ -485,9 +660,18 @@ def extract_facts(client: OpenAI, question: str, result: dict, topic: str, targe
     import json
 
     parsed = json.loads(response.choices[0].message.content)
-    facts = parsed["facts"]
-    # 프롬프트로 못 막은 "정보 없음" 메타 발언을 코드에서 한 번 더 제거 (이중 안전장치)
-    return [f for f in facts if not _is_no_info_statement(f)]
+    out: list[tuple[str, Optional[str]]] = []
+    for item in parsed["facts"]:
+        # 구조화 출력이 계약을 어기는 경우에 대비한다(문자열만 오는 경우 등).
+        if isinstance(item, str):
+            text, region = item, None
+        else:
+            text, region = item.get("text", ""), item.get("region")
+        # 프롬프트로 못 막은 "정보 없음" 메타 발언·깨진 인코딩을 코드에서 한 번 더 제거
+        if not text or _is_unusable_fact(text):
+            continue
+        out.append((text, normalize_region(region)))
+    return out
 
 
 def _search_extract_and_save(
@@ -523,8 +707,8 @@ def _search_extract_and_save(
             continue
         result = {**result, "content": filtered_content}
 
-        fact_texts = extract_facts(client, query, result, topic, target_market)
-        for text in fact_texts:
+        extracted = extract_facts(client, query, result, topic, target_market)
+        for text, region in extracted:
             new_fact = Fact(
                 id=f"fact_{uuid.uuid4().hex[:10]}",
                 text=text,
@@ -533,6 +717,7 @@ def _search_extract_and_save(
                 retrieved_date=date.today(),
                 topic_relevance=query,
                 topic=topic,
+                region=region,          # 2026-07-28: 죽어 있던 필드를 채운다(결함 G)
             )
             stored_fact, is_new = save_fact_if_new(new_fact)
             all_facts.append(stored_fact)

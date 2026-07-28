@@ -29,7 +29,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from agents.market_research import _is_no_info_statement, get_client, simplify_query
+from agents.market_research import _is_unusable_fact, get_client, normalize_region, simplify_query
 from agents.verification import filter_relevant_chunks, verify_facts_batch
 from agents.web_search import chunk_text, search_web
 from fact_store.schema import Competitor, CompetitorType, Fact, SourceTier, VerificationStatus
@@ -68,12 +68,34 @@ COMPETITOR_FACTS_SCHEMA = {
         "schema": {
             "type": "object",
             "properties": {
+                # 2026-07-28 — market_research.FACTS_SCHEMA와 같은 이유로 객체 배열로
+                # 바꿨다(결함 G). fact 문장에서 지역이 빠지면 관련성을 판정할 수 없다.
                 "facts": {
                     "type": "array",
-                    "items": {"type": "string"},
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": (
+                                    "특정 기업/브랜드명이 실제로 등장하는 경쟁 관련 사실 하나를 한 줄로. "
+                                    "이 문장만 따로 읽어도 '어느 시장의 어느 기업 이야기인지' 알 수 있게 "
+                                    "지역을 문장 안에 포함할 것."
+                                ),
+                            },
+                            "region": {
+                                "type": "string",
+                                "description": (
+                                    "이 사실이 어느 지역 시장에 관한 것인지 원문 근거대로. "
+                                    "예) '유럽', '한국', '미국', '북미', '글로벌'. 원문에 지역 근거가 "
+                                    "없으면 '불명'. 추측해서 목표시장 이름을 적지 말 것."
+                                ),
+                            },
+                        },
+                        "required": ["text", "region"],
+                    },
                     "description": (
-                        "이 검색결과 스니펫에서 뽑아낸, 특정 기업/브랜드명이 실제로 등장하는 "
-                        "경쟁사 관련 사실 문장들(가격, 기능, 시장점유율, 투자유치 등). "
+                        "이 검색결과에서 뽑아낸 경쟁사 관련 사실들(가격, 기능, 시장점유율, 투자유치 등). "
                         "기업명이 특정되지 않는 일반론은 제외. 근거 될 만한 내용이 없으면 빈 배열."
                     ),
                 }
@@ -259,7 +281,9 @@ def generate_competitor_queries(
     return parsed["queries"][:n]
 
 
-def extract_competitor_facts(client: OpenAI, query: str, result: dict, topic: str, target_market: str) -> list[str]:
+def extract_competitor_facts(
+    client: OpenAI, query: str, result: dict, topic: str, target_market: str
+) -> list[tuple[str, Optional[str]]]:
     """검색결과 하나(제목+본문)에서 '특정 기업명이 등장하는' 경쟁사 관련 fact를 추출한다.
     result['content']는 가능하면 페이지 실제 본문(fetch_full_text=True일 때), 없으면 스니펫.
 
@@ -288,7 +312,18 @@ def extract_competitor_facts(client: OpenAI, query: str, result: dict, topic: st
 - 연구대상({topic})과 다른 제품 카테고리의 회사(예: 웨어러블 헬스케어 기기가 아닌
   카테터·IV 의료기기 제조사, 건설사의 부대시설 얘기)는 제외하세요.
 - 쓸만한 내용이 없으면 반드시 빈 배열(facts: [])만 반환하세요. "정보가 없습니다" 같은
-  정보 부재 설명 문장 자체를 fact로 넣지 마세요."""
+  정보 부재 설명 문장 자체를 fact로 넣지 마세요.
+
+매우 중요 — 각 fact는 혼자서도 읽히게 쓰세요:
+- fact 문장은 나중에 원문 없이 따로 읽힙니다. **어느 시장의 어느 기업 이야기인지**를
+  문장 안에 넣으세요.
+
+  (나쁨) "2024년 51%의 시장 점유율을 차지했다"
+         → 누가, 어느 시장에서인지 알 수 없습니다.
+  (좋음) "테트라팍 등 상위 5개사가 2024년 유럽 친환경 포장재 시장에서 51%를 차지했다"
+
+- region 필드에는 그 사실이 **어느 지역 시장에 관한 것인지 원문 근거대로** 적으세요.
+  원문에 근거가 없으면 "불명"으로 두고, 목표시장({target_market})을 베껴 적지 마세요."""
 
     response = client.chat.completions.create(
         model=HEAVY_MODEL,
@@ -296,8 +331,16 @@ def extract_competitor_facts(client: OpenAI, query: str, result: dict, topic: st
         response_format=COMPETITOR_FACTS_SCHEMA,
     )
     parsed = json.loads(response.choices[0].message.content)
-    facts = parsed["facts"]
-    return [f for f in facts if not _is_no_info_statement(f)]
+    out: list[tuple[str, Optional[str]]] = []
+    for item in parsed["facts"]:
+        if isinstance(item, str):          # 구조화 출력이 계약을 어긴 경우 대비
+            text, region = item, None
+        else:
+            text, region = item.get("text", ""), item.get("region")
+        if not text or _is_unusable_fact(text):
+            continue
+        out.append((text, normalize_region(region)))
+    return out
 
 
 # 경쟁사가 아닌데 fact에 자주 같이 등장해 잘못 식별될 수 있는 정부기관/규제기관/표준기구 이름
@@ -689,8 +732,8 @@ def _search_extract_and_save(
             continue
         result = {**result, "content": filtered_content}
 
-        fact_texts = extract_competitor_facts(client, query, result, topic, target_market)
-        for text in fact_texts:
+        extracted = extract_competitor_facts(client, query, result, topic, target_market)
+        for text, region in extracted:
             new_fact = Fact(
                 id=f"fact_{uuid.uuid4().hex[:10]}",
                 text=text,
@@ -699,6 +742,7 @@ def _search_extract_and_save(
                 retrieved_date=date.today(),
                 topic_relevance=query,
                 topic=topic,
+                region=region,          # 2026-07-28: 결함 G
             )
             stored_fact, is_new = save_fact_if_new(new_fact)
             run_facts.append(stored_fact)

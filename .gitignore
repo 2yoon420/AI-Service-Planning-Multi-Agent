@@ -49,3 +49,8 @@ frontend/vite.config.ts.timestamp-*.mjs
 
 # pytest 캐시
 .pytest_cache/
+fact_store/fact_snapshot.db
+fact_store/kr_snapshot.db
+orchestrator/checkpoints.db-wal
+orchestrator/checkpoints.db-shm
+eval/__pycache__/
