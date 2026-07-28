@@ -1,0 +1,111 @@
+# CI/CD — push마다 검사하고, main이면 배포한다.
+#
+# 설계 원칙: **배포를 여기서 재구현하지 않는다.** 서버의 deploy/deploy.sh를 그대로
+# 호출한다. 그 스크립트는 2026-07-28에 사람이 직접 돌려 성공한 절차이고, 코드 경로가
+# 하나여야 "수동은 되는데 CI만 실패" 같은 상황이 안 생긴다.
+#
+# 필요한 사전 설정은 deploy/CI_설정.md 참고.
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:        # 손으로 배포를 다시 돌릴 수 있게
+
+# 배포가 겹치면 서버에서 git reset --hard가 동시에 돌아 위험하다.
+# 뒤에 온 실행이 앞선 것을 취소하지 않고 기다리게 한다(cancel-in-progress: false).
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: 테스트
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 파이썬 준비
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'      # 서버(Ubuntu 22.04)와 같은 버전
+          cache: pip
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: pytest
+        # 외부 API를 부르지 않는다 — 전부 mock 기반이라 키가 없어도 돈다.
+        # 그 사실 자체를 여기서 검증하는 셈이다(키를 안 넣었는데 통과해야 정상).
+        run: python -m pytest -q
+
+      - name: Node 준비
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 프론트엔드 타입검사 · 빌드
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc --noEmit
+          VITE_API_BASE=/api npm run build
+
+  deploy:
+    name: 배포
+    needs: test                                    # 테스트가 통과해야만 배포한다
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write                              # Workload Identity Federation용
+    steps:
+      # Workload Identity Federation — 키를 저장하지 않는다.
+      # GitHub이 발급한 OIDC 토큰을 GCP가 직접 검증하고, 수십 분 뒤 만료되는
+      # 단기 액세스 토큰으로 교환한다. 아래 두 값은 비밀이 아니므로 유출돼도
+      # 그 자체로는 쓸 수 없다 — 실제 접근 통제는 GCP 쪽 attribute-condition이
+      # "이 저장소에서 온 요청인가"를 대조해서 한다(CI_설정.md 1-2절).
+      #
+      # 이 스텝이 동작하려면 잡의 permissions에 id-token: write 가 있어야 한다.
+      # 없으면 OIDC 토큰 자체가 발급되지 않아 인증이 실패한다.
+      - name: GCP 인증 (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: VM에서 배포 스크립트 실행
+        env:
+          ZONE: ${{ vars.GCP_ZONE }}
+          VM: ${{ vars.GCP_VM }}
+        run: |
+          gcloud compute ssh "$VM" \
+            --zone="$ZONE" \
+            --tunnel-through-iap \
+            --quiet \
+            --command="sudo -u planner bash /opt/planner/app/deploy/deploy.sh main"
+
+      - name: 공개 URL 응답 확인
+        # 서버 안에서의 /health는 deploy.sh가 이미 본다. 여기서는 Caddy·TLS·
+        # 프론트까지 포함한 바깥에서의 응답을 확인한다 — 2026-07-28에 Caddy가
+        # /api 접두어를 안 떼 전 API가 404였던 사고가 안쪽 검사만으로는 안 잡혔다.
+        env:
+          SITE: ${{ vars.SITE_URL }}
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SITE/api/health" || true)
+            [ "$code" = "200" ] && { echo "정상 (HTTP $code)"; exit 0; }
+            echo "  시도 $i: HTTP $code — 5초 후 재시도"
+            sleep 5
+          done
+          echo "!! $SITE/api/health 가 200을 주지 않습니다."
+          exit 1
