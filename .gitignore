@@ -61,3 +61,4 @@ fact_store/fact_*.db
 # 기획서 산출물: 구버전은 제외, 측정 대상(v2)은 추적한다
 !outputs/v2/
 !outputs/v2/*.docx
+커밋_준비_야간.sh

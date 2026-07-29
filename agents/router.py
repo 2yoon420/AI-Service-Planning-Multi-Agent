@@ -41,7 +41,55 @@ ROUTER_DECISION_SCHEMA = {
         "name": "router_decision",
         "schema": {
             "type": "object",
+            # ── 필드 순서가 판단 정확도를 바꾼다 (2026-07-29) ──────────────────
+            #
+            # 구조화 출력은 스키마 순서대로 토큰을 생성한다. 그래서 `action`이 첫 필드면
+            # **모델은 근거를 한 글자도 쓰기 전에 action을 확정한다.** 연구가 이 현상에
+            # 이름을 붙였다 — premature serialization(arXiv:2606.09410).
+            #
+            #   "구조화 출력의 성능 저하는 모델이 추론을 끝내기 전에 스키마 준수 토큰을
+            #    내놓도록 강제되는 데서 온다. 추론이 구조화 제출보다 앞서면 회복된다."
+            #   "reasoning이 답보다 앞서면 chain-of-thought가 작동한다. 답이 먼저 오면
+            #    모델이 답을 먼저 내고 그다음 근거를 쓰므로 zero-shot이 된다."
+            #
+            # 골든셋 실측이 이것을 확증했다. `revise_pestel` 예외 규칙을 프롬프트에
+            # 넣어도 B-A 케이스가 20/20 오답이었고, 규칙을 강화하자 흔들림만 생겼다
+            # (pest×4 / mres×1). **규칙이 읽히기는 하지만 이기지 못하는 상태** —
+            # 규칙이 없어서가 아니라 적용할 시점이 없어서다.
+            #
+            # 그래서 순서를 바꿨다.
+            #   needs_new_search → reasoning → action → target_query → user_facing_reply
+            #
+            # `needs_new_search`를 맨 앞에 둔 이유: 판단을 두 단계로 쪼갠다. 모델이
+            # "검색이 필요한가"를 먼저 확정해 써놓으면, 그다음 `revise_pestel`을 고르기가
+            # 어려워진다 — 자기가 방금 쓴 것과 모순되기 때문이다.
+            #
+            # 부수 이득: 이 값이 결과에 남아 **판정 근거를 사후 추적**할 수 있고,
+            # "needs_new_search=true인데 revise_pestel"을 코드로 잡는 안전망도 가능해진다.
+            #
+            # 이 프로젝트가 이미 배운 것의 다음 단계다. capability_qa 버그에서
+            # "규칙을 어디에 쓰는가"(description만 믿지 말고 프롬프트 본문에도)를 배웠고,
+            # 이번엔 **"규칙을 언제 읽게 하는가"** 다. 프롬프트에 있어도 모델이 답을
+            # 먼저 내면 소용이 없다.
             "properties": {
+                "needs_new_search": {
+                    "type": "boolean",
+                    "description": (
+                        "이 요청을 이루려면 새 웹검색이 필요한가. '찾아서', '조사해서', "
+                        "'최신', '새로 생긴' 같은 표현이 있으면 true. "
+                        "PESTEL 재실행(revise_pestel)은 새 웹검색을 하지 않으므로, "
+                        "이 값이 true인데 revise_pestel을 고르면 사용자 요청이 이뤄지지 "
+                        "않는다. action을 정하기 전에 이 값을 먼저 확정할 것."
+                    ),
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": (
+                        "action을 정하기 전에, 위 needs_new_search 값과 판단 규칙을 근거로 "
+                        "어떤 action이 맞는지 한두 문장으로 먼저 정리할 것. "
+                        "사용자 화면에 그대로 노출되어 판단 근거를 확인할 수 있게 함."
+                    ),
+                },
                 "action": {
                     "type": "string",
                     "enum": [
@@ -69,10 +117,6 @@ ROUTER_DECISION_SCHEMA = {
                         "action이면 빈 문자열."
                     ),
                 },
-                "reasoning": {
-                    "type": "string",
-                    "description": "이렇게 판단한 이유 한두 문장. 사용자 화면에 그대로 노출되어 판단 근거를 확인할 수 있게 함.",
-                },
                 "user_facing_reply": {
                     "type": "string",
                     "description": (
@@ -81,7 +125,9 @@ ROUTER_DECISION_SCHEMA = {
                     ),
                 },
             },
-            "required": ["action", "target_query", "reasoning", "user_facing_reply"],
+            # required 순서도 생성 순서에 영향을 준다 — properties와 같게 맞춘다.
+            "required": ["needs_new_search", "reasoning", "action",
+                         "target_query", "user_facing_reply"],
         },
     },
 }
@@ -91,7 +137,32 @@ def _router_decision_prompt(user_message: str, revision_count: int) -> str:
     """2026-07-24: capability_qa 버그([[structured_output_schema_instruction_weak]] 메모리)에서
     배운 대로, 스키마 description에만 판단 규칙을 적어두지 않고 프롬프트 본문에도 행동별
     정의와 예시를 명시적으로 중복 기재한다 — description 하나만 믿으면 가벼운/빠른 모델이
-    미묘한 구분을 놓칠 수 있었기 때문."""
+    미묘한 구분을 놓칠 수 있었기 때문.
+
+    ## 2026-07-29: 규칙 3 보강과 규칙 7 신설 — 골든셋이 찾은 결함 두 건
+
+    Router 골든셋(`eval/router_goldenset.py`)을 처음 돌려 **사양-프롬프트 불일치 2건**을
+    찾았다. 두 건 모두 **사양이 코드 주석·docstring에만 있고 모델이 읽는 프롬프트에는
+    없었다.**
+
+    | 결함 | 사양이 있던 곳 | 관측 |
+    |---|---|---|
+    | 재검색 필요 시 research 우선 | `graph.py` `pestel_revision_node` 주석 | **20/20 오답** |
+    | 복수 요청은 하나만 처리 | 이 함수의 docstring | **4/5 오답** |
+
+    **결함 B와 같은 구조다.** 결함 B는 근거지지도 3점 정의가 수치 조작을 서술해서 세 모델
+    전부 3점을 준 것이었다 — 모델이 틀린 게 아니라 **지시를 정확히 따른** 것이다.
+    여기도 같다. *"PESTEL에 최신 규제 반영해줘"* 는 옛 규칙 3에 표면적으로 딱 맞았다.
+
+    **피해가 실질적이었다.**
+      · 재검색 누락 — `pestel_revision_node`는 새 검색을 하지 않으므로, 사용자가 요청한
+        최신 자료가 반영되지 않은 채 `revision_count`만 1 소진된다.
+      · 복수 요청 되묻기 — 사용자가 *"경쟁사랑 시장 규모 둘 다"* 라고 **구체적으로**
+        말했는데 *"구체적으로 무엇을"* 을 되묻는다. 같은 말을 반복하게 만든다.
+
+    이 프로젝트가 이미 다룬 주제의 변형이다. PRD와 구현의 불일치(1차 검토 ④)는 문서
+    문제로 봤는데, 이번엔 **코드 주석과 프롬프트의 불일치**다. **프롬프트도 코드의
+    일부인데 사양이 그쪽으로 전달되지 않았다.**"""
     return f"""당신은 AI 서비스 기획 보조 시스템의 Router입니다. 사용자가 기획서 초안을
 확인한 뒤 아래처럼 채팅으로 답했습니다. 이 한 마디를 보고 다음에 무엇을 할지 하나만
 정확히 판단하세요.
@@ -108,6 +179,11 @@ def _router_decision_prompt(user_message: str, revision_count: int) -> str:
    (예: "웨어러블 헬스케어 기기 미국 시장 투자 유치 현황").
 3. PESTEL/환경분석을 다시 봐달라는 요청이면 action=revise_pestel. 이건 새 웹검색이
    아니라 기존 자료 재분석이므로 target_query는 빈 문자열로 둬도 됩니다.
+   ★ 단, "최신 자료를 찾아서", "새로 생긴 규정을 추가해서", "최근 동향을 조사해서"처럼
+   **새 검색이 필요한 요청이면 PESTEL 얘기라도 action=revise_market_research**를
+   고르고 target_query를 채우세요. PESTEL 재실행은 새 웹검색을 하지 않으므로, 그대로
+   revise_pestel로 보내면 사용자가 요청한 최신 자료가 반영되지 않은 채 재작업 한도만
+   1회 소진됩니다.
 4. 경쟁사 정보를 더 찾거나 다시 봐달라는 요청이면 action=revise_competitor.
    target_query에 무엇을 검색할지 채우세요(예: "경쟁사 A 가격 정보").
 5. "이 서비스가 뭘 할 수 있는지/어디까지 되는지"를 묻는 질문(기획서 내용과 무관한, 서비스
@@ -116,7 +192,14 @@ def _router_decision_prompt(user_message: str, revision_count: int) -> str:
 6. 위 다섯 경우 중 어디에도 뚜렷이 안 맞을 만큼 애매하면(예: "전체적으로 좀 더 좋게
    해줘") action=unclear로 하고, user_facing_reply에 "구체적으로 무엇을 수정하면
    될지" 되묻는 문구를 채우세요. 애매한데 대충 짐작해서 다른 action을 고르지 마세요 —
-   잘못 넘겨짚어 엉뚱한 재작업을 시작하는 것보다 되묻는 편이 훨씬 낫습니다."""
+   잘못 넘겨짚어 엉뚱한 재작업을 시작하는 것보다 되묻는 편이 훨씬 낫습니다.
+
+7. 여러 요청이 한 문장에 섞여 있으면(예: "경쟁사랑 시장 규모 둘 다 다시 봐주세요")
+   **unclear로 되묻지 마세요.** 사용자는 이미 구체적으로 말한 것이므로 되물으면
+   같은 말을 반복하게 만듭니다. 그중 하나를 골라 해당 action을 정하고, reasoning에
+   "이번 턴에는 A를 처리하고, B는 다음 턴에 말씀해 주세요"를 남기세요.
+   unclear는 **무엇을 원하는지 알 수 없을 때**만 쓰는 것이고, 원하는 것이 둘 이상
+   분명할 때 쓰는 것이 아닙니다."""
 
 
 def decide_next_action(user_message: str, revision_count: int, client: OpenAI | None = None) -> dict:
