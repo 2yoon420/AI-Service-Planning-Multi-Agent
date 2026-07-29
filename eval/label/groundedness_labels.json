@@ -1,0 +1,522 @@
+{
+ "labeled_at": "2026-07-29T12:31:56.084Z",
+ "axis": "groundedness",
+ "method": "분해 척도 (핵심 주장 + 수치·고유명사 → 코드가 환산). ②는 코드가 후보를 제시하고 사람이 확정 — 반자동.",
+ "labeler": "이후윤",
+ "n": 50,
+ "sample": {
+  "built_at": "2026-07-29T15:18:57+09:00",
+  "db": "fact_store/fact_20260729.db",
+  "n": 50,
+  "seed": 20260729,
+  "axis": "groundedness",
+  "strata": {
+   "2": 0.16,
+   "3": 0.6,
+   "5": 0.24
+  },
+  "note": "_machine_* 필드는 라벨링 UI에 넣지 않는다 (앵커링 방지). 분석 단계 전용."
+ },
+ "labels": [
+  {
+   "id": "fact_1af251df85",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "2020년 한국 시니어 케어푸드 시장에서 현대그린푸드는 '그리팅' 브랜드 론칭 및 1000억원 투자로 '스마트 푸드센터' 건설",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_385b2b976c",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "CJ프레시웨이는 2015년 한국 시니어 케어푸드 시장에서 '헬씨누리' 케어푸드 전문 브랜드를 론칭한 후 2025년 6월 노인요양시설 이동급식 기업 '서진푸드'와 협약해 종합 솔루션 사업을 확대했다",
+   "claim_scope": "예",
+   "numeric_scope": "일부",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "\"13일 한국농수산식품유통공사에 따르면 국내 케어푸드 시장 규모는 2014년 약 7000억 원에서 2020년 2조 원을 넘어섰으며, 2025년에는 3조 원 규모로 확대될 전망이다.\" 2025년은 시장 규모에 관한 내용"
+  },
+  {
+   "id": "fact_972a8c2b66",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "풀무원이 2015년 B2B 케어푸드 시장 진출 후 2022년 디자인밀 플랫폼으로 고령친화식 개인 맞춤형 식단 사업을 확장해 한국 시니어 케어푸드 시장에서 경쟁 중임.",
+   "claim_scope": "예",
+   "numeric_scope": "일부",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "\"기사입력 : 2022년04월09일 07:34 최종수정 : 2022년04월09일 07:34\" 2022년은 해당 기사가 작성된 날짜"
+  },
+  {
+   "id": "fact_d8a4c2d552",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "풀무원푸드머스는 2015년 한국 시니어 케어푸드 시장에서 풀스케어 브랜드를 출시하여 부드러움·영양균형·기호성 기준을 충족하는 시니어 연화식 제품을 공급하고 있다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "원문 기사는 '연화식'을 현대그린푸드만의 핵심 차별화 키워드로 명확히 구별하여 작성했습니다. 그러나 요약자는 풀무원푸드머스 설명에 나온 '부드러움'이라는 단어를 보고 \"부드러우니까 연화식이겠지\" 하고 스스로 추론하여, 현대그린푸드의 키워드인 '연화식'을 풀무원푸드머스에 결합해 버렸습니다."
+  },
+  {
+   "id": "fact_269ca73dfc",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "풀무원의 시니어 케어푸드 브랜드 디자인밀이 한국 시니어 케어푸드 시장에서 최다 고령친화우수식품(14종)을 보유하고 있다.",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_4f002035ae",
+   "topic": "친환경 포장재",
+   "text": "DS Smith(영국)는 2022년 유럽 시장에서 종이 및 판지 친환경 포장재를 공급하는 선도 기업으로, 의류 및 식품 산업 B2B 고객을 주요 대상으로 합니다.",
+   "claim_scope": "부분",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 3,
+   "uncertain": false,
+   "note": "보고서의 메타데이터(기준연도=2022, 참여기업=DS Smith, 재료=종이/판지)를 요약자가 임의로 엮어서 하나의 서술문으로 만든 것"
+  },
+  {
+   "id": "fact_8387bf0092",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "일동후디스는 한국 시니어 케어푸드 시장에서 케어푸드 브랜드 '케어메이트'를 론칭하고 당뇨환자용 균형당뇨식 2종을 선보였으며, 혈당 조절이 필요한 환자의 식단 관리를 돕는 제품이다.",
+   "claim_scope": "부분",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 3,
+   "uncertain": false,
+   "note": "https://www.mkhealth.co.kr/news/articleView.html?idxno=61432에는 일동후디스가 케어푸드 브랜드 '케어메이트'를 론칭한 내용이 있지만, 위 글에서는 발견할 수 없음.\n만약 내가 사이트 들어가서 원문과 fact를 비교해 점수를 주었다면 1번에 \"예\"를 선택했을 것임- '부분'이 아니라"
+  },
+  {
+   "id": "fact_406896cf3d",
+   "topic": "친환경 포장재",
+   "text": "유럽은 2023-2032년 기간 동안 포장재 시장에서 약 4.7%의 CAGR로 성장할 것으로 예상된다",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": "\"분석 및 예측 2023-2032\"으로 2023과 2032년이 표시된걸 확인"
+  },
+  {
+   "id": "fact_0ebedbb43e",
+   "topic": "친환경 포장재",
+   "text": "아르다그 그룹 SA(룩셈부르크)는 유럽 B2B 유통 시장에서 재활용 포장재 공급업체 중 하나로 활동한다.",
+   "claim_scope": "아니오",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "그러나 실제 출처(https://www.databridgemarketresearch.com/ko/reports/global-recycled-packaging-market)의 웹페이지를 조회한 결과, 전체 20개 주요 참여 기업 리스트 중 11번째 항목에 Ardagh Group S.A. (Luxembourg)가 정확히 명시되어 있음을 확인했다. 만약 내가 원본을 읽었다면 \"예\"를 주었을 것 - \"아니요\"말고"
+  },
+  {
+   "id": "fact_2245c8b747",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "북미 웨어러블 헬스케어 기기 시장에서 원격 환자 모니터링 세그먼트는 당뇨병·심장병 등 만성 질환 증가로 인해 예측 기간 동안 성장할 것으로 예상된다.",
+   "claim_scope": "예",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_952e6aedbe",
+   "topic": "친환경 포장재",
+   "text": "EU는 2025년까지 포장 폐기물 재활용률 65%, 2030년까지 70% 목표를 설정했다",
+   "claim_scope": "아니오",
+   "numeric_scope": "일부",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "글 기준으로는 '아니요' 판정이 나오지만, 실제 KATI 뉴스 기사 원문 기준으로는 완벽하게 정확한 '예 (100% 팩트 요약)'"
+  },
+  {
+   "id": "fact_55b35f9ca9",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "풀무원의 '풀스케어' 브랜드는 한국 시니어 케어푸드 시장에서 1~3단계 점도 조절 연화식 제품을 통해 씹기·삼키기 어려운 고령자에게 맞춤형 영양을 제공하며 경쟁하고 있다",
+   "claim_scope": "예",
+   "numeric_scope": "일부",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_b68c7a6ca1",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "상위 5개 업체가 2023년 북미 웨어러블 헬스케어 기기 시장에서 약 34%의 점유율을 차지했다",
+   "claim_scope": "아니오",
+   "numeric_scope": "일부",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "\"지역 리더십: 북미는 약 48%의 시장 점유율을 차지하고 있으며, 아시아 태평양 지역은 약 31%의 점유율로 강력한 모멘텀을 유지하고 있으며 유럽은 거의 19%로 그 뒤를 따르고 있습니다. 경쟁 환경: 상위 5개 업체는 거의 34%의 점유율을 차지하고 있으며, \"이부분이 어떻게 \"상위 5개 업체가 2023년 북미 웨어러블 헬스케어 기기 시장에서 약 34%의 점유율을 차지했다\"가 되는지 모르겠다"
+  },
+  {
+   "id": "fact_bbb8ef3cb1",
+   "topic": "친환경 포장재",
+   "text": "유럽은 2025년 글로벌 친환경 포장재 시장에서 32.08% 점유율을 차지하며 116.13억 달러 규모를 기록했고, 2026-2034년 기간 동안 연평균 7.83% 성장률(CAGR)로 확대될 전망이다",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_a57b43887c",
+   "topic": "친환경 포장재",
+   "text": "Amcor plc는 2024년 유럽 B2B 유통 시장에서 8.2%의 시장 점유율로 친환경 포장재 분야를 선도하고 있습니다",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_6c9ebf3ccb",
+   "topic": "친환경 포장재",
+   "text": "벨기에의 식품용 연포장재와 비식품용 연포장재 구분을 위해 '디지털 워터마크'를 활용한 대규모 선별 실증을 진행 중이다",
+   "claim_scope": "예",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_475cfb1081",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "대상웰라이프는 한국 시니어 케어푸드 시장에서 환자용 식품 브랜드 뉴케어를 통해 당뇨환자용 식단 '뉴케어 당플랜 볶음밥' 2종을 출시했으며, 고단백 저당 영양 설계를 특징으로 한다.",
+   "claim_scope": "아니오",
+   "numeric_scope": "있음",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "기사 원문에는 요약문 내용이 다음과 같이 명확히 기술되어 있습니다.\n브랜드 및 제품: \"대상웰라이프는 환자용 식품 브랜드 뉴케어를 통해 당뇨환자용 식단 '뉴케어 당플랜 볶음밥' 2종을 출시했다.\"\n\n영양 설계 특징: \"회사 측에 따르면 당 식이조절을 고려한 '고단백 저당' 영양 설계가 특징이다.\"\n상세 구성: 렌틸콩 소고기 볶음밥, 퀴노아 닭가슴살 볶음밥 등 총 2종 구성 및 당 함량 3g, 단백질 20g 함유 사실이 원문에 수록되어 있습니다."
+  },
+  {
+   "id": "fact_321fd7a5e6",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "2023년 1월, 가민은 심전도(ECG) 기능에 대한 FDA 승인을 획득하여 웨어러블 헬스케어 기기 시장에서 기술 확장을 이끌었다.",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_f52bf5d842",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "북미 웨어러블 헬스케어 기기 시장은 2035년까지 약 1169억 2730만 달러에 달할 것으로 예상되며, 연평균 성장률(CAGR) 17.9%를 기록할 전망이다",
+   "claim_scope": "아니오",
+   "numeric_scope": "일부",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "\"웨어러블 헬스케어 기기 시장의 글로벌 가치는 2026년 2억 6,562억 8700만 달러에서 2027년 3억 1,317.62만 달러로 성장하고, CAGR 17.9%로 2035년까지 1억 1,692억 2,730만 달러에 이를 것으로 예상됩니다\" - 북미가 아닌 글로벌 가치다, 북미는 \"북미는 약 48%의 시장 점유율을 차지하고 있으며\" 이다"
+  },
+  {
+   "id": "fact_0ef4b0a9aa",
+   "topic": "친환경 포장재",
+   "text": "유니레버는 2025년까지 재활용, 재사용 또는 퇴비화 가능한 소재 100% 달성 공약을 발표하며 유럽 B2B 유통 시장에 공급망 압박을 가하고 있다",
+   "claim_scope": "아니오",
+   "numeric_scope": "일부",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_0a073bd649",
+   "topic": "친환경 포장재",
+   "text": "유럽의 엄격한 규정과 정책은 재활용 및 폐기물 감소를 촉진하여 포장재 시장 확장을 지원한다",
+   "claim_scope": "예",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_d678fb3571",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "현대그린푸드는 2020년 한국 시니어 케어푸드 시장에 진출하기 위해 1000억 원을 투자해 '스마트 푸드센터'를 설립했으며, 2028년까지 메디푸드 식단을 430종까지 확대할 계획이다.",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_57bf8a234a",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "현대그린푸드는 한국 시니어 케어푸드 시장을 대상으로 고혈압 환자를 위한 정기 구독형 한식 식단(HMR) 제품을 출시했다",
+   "claim_scope": "부분",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 3,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_abe75046b9",
+   "topic": "친환경 포장재",
+   "text": "스웨덴 BillerudKorsnas와 오스트리아 Alpla의 합작법인 파보코(Paboco)는 바이오 원료 기반 종이병을 개발해 플라스틱 사용량을 최대 65% 절감했으며, 유럽 시장에서 100% 바이오 원료 종이병 상용화를 목표로 한다",
+   "claim_scope": "아니오",
+   "numeric_scope": "있음",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "원문 기사를 보면 \"글로벌 기업 P&G와 손잡고 2022년까지 100% 바이오 원료를 사용한 종이병 시제품을 내놓을 계획이다\" 즉, 유럽 시장에서 상용화를 목표로 하는지 알 수 없다\n"
+  },
+  {
+   "id": "fact_629b7427d5",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "풀무원 푸드앤컬처는 한국 시니어 케어푸드 시장에서 '지속가능식생활 체험 식단 프로그램'을 통해 혈당 관리용 211 식사법 기반 체험형 HMR 서비스를 제공하고 있다",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "\"풀무원 푸드서비스 전문기업 푸드앤컬처는 위탁 급식 사업장에 ‘지속가능식생활 체험 식단 프로그램’을 도입했다\" - 시니어 케어푸드 시장인지 모르겠음"
+  },
+  {
+   "id": "fact_97e58be842",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "현대그린푸드는 2016년부터 한국 시장에서 '메디푸드' 등 전문 케어푸드 식단을 개발하며 2022년 4월 신장질환식단을 포함한 특수의료용도식품을 출시했다",
+   "claim_scope": "아니오",
+   "numeric_scope": "있음",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "\"지난 2022년 4월에는&nbsp;전문 케어푸드 식단 메디푸드를 선보였다.\" - 2016년부터 한국 시장에서 '메디푸드' 가 아니다\n\"2022년 당뇨식단과 암환자식단을 선보이며 메디푸드 사업을 본격화한 데 이어 지난해 8월과 10월에는 각각 투석환자와 비투석환자를 위한 신장질환식단도 출시했다. \" - 2022년 4월이 아니다"
+  },
+  {
+   "id": "fact_d61f699955",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "DexCom Inc.는 북미 시니어 건강관리 시장에서 Medicare 보장 확대로 1,200만 명 추가 환자 접근을 예상하며 2형 비인슐린 환자 시장 확장을 통해 다중 년도 두 자릿수 성장 가능성이 있다",
+   "claim_scope": "부분",
+   "numeric_scope": "일부",
+   "human_groundedness": 3,
+   "uncertain": false,
+   "note": "원문 출처에만 보이고 글에는 보이지 않음 - \"Medicare coverage for this population could unlock access for nearly 12 million additional patients, with private payer coverage already progressing\", \"his expansion represents a structural demand driver that could sustain double-digit growth for multiple years\"\nMedicare는 미국의 보험이기 추론 한것으로 보임"
+  },
+  {
+   "id": "fact_117ca24e9a",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "현대그린푸드는 2023년 상반기 한국 시니어 케어푸드 시장에서 메디푸드 매출 18% 성장률을 기록했다",
+   "claim_scope": "아니오",
+   "numeric_scope": "일부",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": "글에는 없고 원문에 있다 - \"현대그린푸드는 올 상반기 메디푸드 매출이 지난해 상반기와 비교해 18% 신장했다고 6일 밝혔다.\", 올 상반기는 기사 작성이 2025-08이기 때문에 2025년이다"
+  },
+  {
+   "id": "fact_8222f4bef5",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "2026년 북미 시니어 건강관리 시장에서 Fitbit Sense 2는 ~$249 가격대에 스트레스 및 심장 건강 추적을 위한 고급 생체 인식 기능을 제공합니다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "북미'라는 특정 지역이나 '시니어 건강관리 시장'이라는 특정 타깃층은 원문에 명시되어 있지 않다"
+  },
+  {
+   "id": "fact_d3a8dd62b7",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "현대그린푸드는 2025년 상반기 한국 시니어 케어푸드 시장에서 메디푸드 신장질환식단 포함 247종 제품을 보유하며, 메디푸드 매출이 전년 동기 대비 18% 성장했다.",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_6d232ff25b",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "현대그린푸드는 2020년 한국 시니어 케어푸드 시장 진출을 위해 1000억원을 투자해 스마트 푸드센터를 구축했다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_879fbb6515",
+   "topic": "친환경 포장재",
+   "text": "CJ제일제당은 유럽 B2B 유통 시장에서 PHA 생분해성 바이오소재와 종이 기반 포장재를 개발하며, 폴 바셋 매장에 PHA 빨대 시범 도입 후 전 매장 확대를 추진 중이다.",
+   "claim_scope": "아니오",
+   "numeric_scope": "일부",
+   "human_groundedness": 1,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_d39a24ecb3",
+   "topic": "친환경 포장재",
+   "text": "Schoeller Allibert는 유럽 B2B 유통 시장에서 자동차, 음료, 식품 분야 및 산업용 고객 대상으로 친환경 포장재를 공급하는 세계 시장 리더이다.",
+   "claim_scope": "부분",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 3,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_cd7a633217",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "Fitbit Inspire 3은 북미 예산 구매자용 웨어러블 기기로 10일 배터리 수명과 수면 추적 기능을 $79에 제공한다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_a3be1d3074",
+   "topic": "친환경 포장재",
+   "text": "친환경 포장 시장은 재활용 원료 포장이 주도하고 있으며 종이 제품의 사용 증가는 높은 재활용률과 비용 효율성으로 유럽 시장 성장에 기여했다",
+   "claim_scope": "부분",
+   "numeric_scope": "해당없음",
+   "human_groundedness": 3,
+   "uncertain": false,
+   "note": "유럽 시장 성장에 기여했다는 fact는 이글에서 알 수 없다"
+  },
+  {
+   "id": "fact_26cd84da0f",
+   "topic": "친환경 포장재",
+   "text": "EU PPWR(Regulation (EU) 2025/40)은 포장재를 판매 포장, 단위 포장, 운송 포장으로 분류하고 중금속 규제를 적용한다.",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_1142cb3e54",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "2021년 기준 북미 웨어러블 의료 기기 시장에서 Apple Inc.(미국), Fitbit(미국), Garmin(미국) 등 미국 기반 기업들이 주요 시장 참여자로 활동 중",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_e8e200e4ab",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "2026년 북미 시니어 건강관리 시장에서 Fitbit Sense 2는 $249 가격에 심전도(ECG), 스트레스 관리 센서로 고급 건강 추적 기능을 강조하고 있다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_0ccc6a4ffc",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "아워홈은 한국 시니어 케어푸드 시장에서 푸드테크 기반의 맞춤형 식품(메디케어 등) 사업 확대를 통해 식품 혁신을 견인하고 있으며, 2022년부터 연구 개발(R&D) 투자를 본격화하고 있다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_cbef4299a4",
+   "topic": "시니어 가정간편식(HMR)",
+   "text": "2020년 한국 시니어 케어푸드 시장에서 신세계푸드는 '이지밸런스' 브랜드로 케어푸드 사업 진출",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_c19ba7aa50",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "Apple Inc., Garmin Ltd., Omron Healthcare, Inc. 등 주요 기업들이 2023년 북미 웨어러블 헬스케어 기기 시장에서 시장 점유율 상위권을 차지했다",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "북미가 아닌 글로벌 기준임"
+  },
+  {
+   "id": "fact_3dbe2e702d",
+   "topic": "친환경 포장재",
+   "text": "KTR은 2026년 8월 12일 시행 예정인 EU PPWR 규제에 대응하여 유럽 B2B 유통 시장을 대상으로 친환경 포장재의 기술문서(TD) 및 적합성 선언서(DoC) 발급 서비스를 제공한다",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "단순 b2b가 아닌 b2c, eu전체에 대한 글임"
+  },
+  {
+   "id": "fact_354f018ecc",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "2026년 북미 시장에서 Garmin의 Instinct 3 AMOLED는 10ATM 방수, 멀티밴드 GPS, 손전등 기능을 갖춘 내구성형 웨어러블 헬스케어 기기로, 18일 배터리 수명을 제공하며 $350 근처 가격대이다",
+   "claim_scope": "예",
+   "numeric_scope": "일부",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_895536a12c",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "미국인의 20%는 웨어러블 헬스케어 기기를 보유하고 있다",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_020c84eb8d",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "2026년 북미 웨어러블 헬스케어 시장에서 Google Pixel Watch 4가 Fitbit 브랜드의 핵심 추적 경험을 제공하는 최고의 스마트워치로 평가되며, Wear OS 6 기반으로 Gmail, 캘린더 등 구글의 앱과 플레이 스토어 제공 앱과 호환된다",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "글로벌 시장의 이야기지, 북미인지 알 수 없음"
+  },
+  {
+   "id": "fact_b81fcb5ccc",
+   "topic": "친환경 포장재",
+   "text": "IPL Schoeller는 유럽 B2B 유통 시장을 대상으로 재사용 가능한 친환경 포장재 솔루션을 제공하며, 2025년 지속가능성 보고서를 통해 순환 경제 책임을 강조하고 있다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "원문은 '글로벌 공급망' 대상이며, 유통뿐만 아니라 자동차·제약·농업 등 전 산업 B2B 대상임에도 '유럽 유통 시장'으로 축소함"
+  },
+  {
+   "id": "fact_c289a3f08d",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "캐나다는 건강과 웰빙에 대한 인식 증가로 2023년부터 2030년까지 웨어러블 헬스케어 기기 시장이 크게 성장할 것으로 예상된다.",
+   "claim_scope": "예",
+   "numeric_scope": "있음",
+   "human_groundedness": 5,
+   "uncertain": false,
+   "note": ""
+  },
+  {
+   "id": "fact_b7a495bc73",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "Fitbit Charge 6(159달러)은 GPS, ECG, Google Wallet, Google Maps, AMOLED 디스플레이를 탑재한 7일 배터리 수명의 웨어러블 헬스케어 기기로, 2026년 북미 시장에서 '대부분을 위한 최고의 Fitbit'으로 평가되었다.",
+   "claim_scope": "부분",
+   "numeric_scope": "일부",
+   "human_groundedness": 3,
+   "uncertain": false,
+   "note": "글에는 없지만, 원문에는 $159, 7일, 2026년이 포함되어 있음\n원문은 일반 글로벌 소비자 대상 테크 리뷰 가이드이며, 특정 '북미 시장'으로 한정하지 않음"
+  },
+  {
+   "id": "fact_b64e12ebae",
+   "topic": "웨어러블 헬스케어 기기",
+   "text": "Dexcom은 2025년 연간 북미 시장을 포함한 글로벌 시장에서 웨어러블 헬스케어 기기로 46억 4천5백만 달러의 유기적 매출을 달성했다",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "글에는 구체적인 수치가 없지만, 원문에는 있음"
+  },
+  {
+   "id": "fact_0e79d5a6a6",
+   "topic": "친환경 포장재",
+   "text": "Schoeller Allibert는 유럽 B2B 유통 시장을 포함한 50개 이상의 국가에서 13개 제조 플랜트를 운영하며, 5억 유로 이상의 매출을 기록하는 친환경 포장재 분야의 글로벌 리더이다.",
+   "claim_scope": "부분",
+   "numeric_scope": "있음",
+   "human_groundedness": 4,
+   "uncertain": false,
+   "note": "유럽(Europe, UK, Spain) 권역 진출 및 운영 사실은 명시되어 있으나, 원문에 'B2B 유통 시장'이라는 구체적 세그먼트 명칭은 존재하지 않음"
+  }
+ ]
+}
