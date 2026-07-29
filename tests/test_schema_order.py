@@ -20,8 +20,9 @@ import pytest
 import agents.verification as V
 from eval.schema_order import (  # noqa: I001
     ANCHOR_5, CONDITIONS, RecordingClient, cites_source,
-    GRADE_4_VARIANTS, TARGET_MARKETS, grade_with, rubric_with_4_variant,
-    rubric_without_4, schema_reasoning_first, schema_score_first,
+    ANCHOR_R1, GRADE_4_VARIANTS, RULE0_TEXT, TARGET_MARKETS, apply_rule0,
+    grade_with, rubric_with_4_variant, rubric_with_rule0, rubric_without_4,
+    rubric_without_rule0, schema_reasoning_first, schema_score_first,
     target_market_for,
 )
 
@@ -111,23 +112,26 @@ ITEM = {"text": "시장은 2조 원 규모다", "source_excerpt": "시장은 2�
 
 
 @pytest.mark.parametrize("cond", list(CONDITIONS))
-def test_조건별_스키마와_프롬프트가_실제로_전달된다(cond):
-    _, reorder, add4 = CONDITIONS[cond]
+def test_조건별_스키마가_실제로_전달된다(cond):
+    """프롬프트 쪽 확인은 `test_조건별_규칙0_상태가_실제로_전달된다`가 함께 본다."""
+    _, reorder, add4, add_r0 = CONDITIONS[cond]
+    r0 = apply_rule0(add_r0)
     cl = RecordingClient()
     grade_with(cl, schema_reasoning_first() if reorder else schema_score_first(),
-               None if add4 else rubric_without_4, ITEM, "테스트 시장")
+               r0 if add4 else (lambda p: r0(rubric_without_4(p))), ITEM, "테스트 시장")
     sch = cl.seen[-1]["response_format"]["json_schema"]["schema"]
     want = ["reasoning", "score"] if reorder else ["score", "reasoning"]
     assert list(sch["properties"]) == want
     assert sch["required"] == want
-    assert ("4점:" in cl.seen[-1]["prompt"]) is add4
 
 
 def test_호출후_운영상수가_복구된다():
     cl = RecordingClient()
-    grade_with(cl, schema_score_first(), rubric_without_4, ITEM, "테스트 시장")
+    r0 = apply_rule0(True)
+    grade_with(cl, schema_score_first(), lambda p: r0(rubric_without_4(p)), ITEM, "테스트 시장")
     assert list(V.GRADE_SCHEMA["json_schema"]["schema"]["properties"]) == ["reasoning", "score"]
     assert "- 4점:" in V.PERSPECTIVE_PROMPTS["groundedness"]
+    assert "■ 규칙 0" not in V.PERSPECTIVE_PROMPTS["groundedness"], "규칙 0이 운영에 새면 안 된다"
 
 
 def test_예외가_나도_운영상수가_복구된다():
@@ -216,3 +220,75 @@ def test_두_변형이_서로_다른_결과를_만든다():
     p2 = rubric_with_4_variant(g, "v2")
     assert p1 != p2 and p1 != g and p2 != g
     assert all("- 4점:" in x for x in (p1, p2))
+
+# ── 규칙 0 (결함 N 후보) ───────────────────────────────────────────────────
+def test_규칙0은_규칙1보다_앞에_온다():
+    """지금 기계가 목표시장 서술을 **규칙 1로** 처리해 기각하고 있다.
+
+    예외를 규칙 1보다 뒤에 두면 이미 적용된 규칙을 되돌려야 하는데, Router 결함 J에서
+    그 방식이 실패했다(규칙 안에 예외를 삽입해도 90.0%에서 멈췄다).
+    """
+    p = rubric_with_rule0(V.PERSPECTIVE_PROMPTS["groundedness"])
+    assert p.find("■ 규칙 0") < p.find(ANCHOR_R1)
+
+
+def test_규칙0_왕복이_원문을_복원한다():
+    """조건을 절대적으로 정의하려면 넣고 빼는 것이 정확히 역연산이어야 한다."""
+    orig = V.PERSPECTIVE_PROMPTS["groundedness"]
+    assert rubric_without_rule0(rubric_with_rule0(orig)) == orig
+
+
+def test_규칙0_중복삽입은_실패한다():
+    p = rubric_with_rule0(V.PERSPECTIVE_PROMPTS["groundedness"])
+    with pytest.raises(SystemExit):
+        rubric_with_rule0(p)
+
+
+def test_규칙0_없는데_제거하면_실패한다():
+    with pytest.raises(SystemExit):
+        rubric_without_rule0(V.PERSPECTIVE_PROMPTS["groundedness"])
+
+
+def test_규칙0이_지역조작_예외를_담는다():
+    """`주입된 맥락`과 `fact가 주장하는 지역`의 경계가 애매하다.
+
+    원문이 유럽 얘기인데 fact가 "북미 시장에서"라고 쓴 경우는 **잡아야 한다.**
+    예외를 빼면 규칙 0이 지역 조작까지 면제해버린다.
+    """
+    assert "다른 지역을 말하는데" in RULE0_TEXT
+    assert "원문에 없는 **수치**가 붙은 경우" in RULE0_TEXT
+
+
+def test_규칙0이_감점대상을_명시한다():
+    """무엇이 면제되는지만 말하고 무엇이 여전히 필요한지 안 말하면 과잉 면제가 된다."""
+    assert "주장하는 내용" in RULE0_TEXT
+    for k in ("금액", "연도", "고유명사"):
+        assert k in RULE0_TEXT, k
+
+
+def test_apply_rule0은_운영상태와_무관하게_맞춘다():
+    """이미 있으면 넣지 않고, 없으면 넣는다 — 운영에 반영된 뒤에도 조건이 성립해야 한다."""
+    orig = V.PERSPECTIVE_PROMPTS["groundedness"]
+    on, off = apply_rule0(True), apply_rule0(False)
+    assert "■ 규칙 0" in on(orig)
+    assert "■ 규칙 0" not in off(orig)
+    assert on(on(orig)) == on(orig), "이미 있는데 또 넣으면 안 된다"
+    assert off(off(orig)) == off(orig), "없는데 또 빼려 하면 안 된다"
+
+
+@pytest.mark.parametrize("cond", list(CONDITIONS))
+def test_조건별_규칙0_상태가_실제로_전달된다(cond):
+    _, reorder, add4, add_r0 = CONDITIONS[cond]
+    r0 = apply_rule0(add_r0)
+    cl = RecordingClient()
+    grade_with(cl, schema_reasoning_first() if reorder else schema_score_first(),
+               r0 if add4 else (lambda p: r0(rubric_without_4(p))), ITEM, "테스트 시장")
+    assert ("■ 규칙 0" in cl.seen[-1]["prompt"]) is add_r0
+    assert ("- 4점:" in cl.seen[-1]["prompt"]) is add4
+
+
+def test_조건이_여섯개다():
+    """D가 현 운영, E가 규칙 0 추가. A~C는 수정 전 상태 재현용."""
+    assert set(CONDITIONS) == set("ABCDEF")
+    assert CONDITIONS["D"][1:] == (True, True, False), "D는 현 운영이어야 한다"
+    assert CONDITIONS["E"][1:] == (True, True, True), "E는 D + 규칙 0"

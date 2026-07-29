@@ -79,6 +79,9 @@ OUT = OUT_DIR / "schema_order.json"
 
 STATUSES = ["채택", "보류", "기각"]
 
+# 운영 프롬프트에 규칙 0이 들어 있는지 — 배선 검사가 원상 복구를 확인할 때 쓴다.
+RULE0_IN_PRODUCTION = "■ 규칙 0" in V.PERSPECTIVE_PROMPTS["groundedness"]
+
 # ── 4점 정의 (H1의 처방) ───────────────────────────────────────────────────
 #
 # 기존 루브릭의 5점과 3점 사이가 비어 있다.
@@ -187,12 +190,114 @@ def rubric_with_4_variant(prompt: str, variant: str) -> str:
 #
 # D 가 현 운영 상태다(결함 L·M 수정 후). A 는 수정 전 상태이며 루브릭에서 4점을
 # 지우고 스키마 순서를 되돌려 재현한다.
+ANCHOR_R1 = "■ 규칙 1 (최우선)"
+
+# ── 규칙 0 (결함 N 후보의 처방) ─────────────────────────────────────────────
+#
+# ## 왜 필요한가
+#
+# 과다 기각 10건(기계 기각 / 사람 채택)의 근거 문장을 읽었더니 **9건이 같은 이유**였다.
+#
+#   "fact 문장에 포함된 '유럽 B2B 유통 시장'이라는 고유명사와 '친환경 포장재 분야'라는
+#    내용은 원문에 언급되지 않았습니다. … 규칙 1 위반(2점 이하)에 해당합니다."
+#
+#   "'1000억원' 및 '2020년' 수치는 원문에 동일한 값으로 명시되어 있으나,
+#    '한국 시니어 케어푸드 시장 진출'이라는 고유명사는 원문에 없는 지어낸 내용입니다."
+#
+# 파이프라인이 fact 문장에 목표시장 서술을 주입하는데, 근거지지도 루브릭은 그것이
+# **질문 쪽에서 온 맥락**이라는 것을 말하지 않는다. 그래서 기계가 "지어낸 고유명사"로
+# 보고 규칙 1로 기각한다. ②있음(수치 전부 원문에 있음) 29건 중 11건을 기각했다
+# (사람은 3건).
+#
+# **같은 문제를 후보 추출기에서 이미 만났다.** `build_groundedness_sample.py`에서
+# `B2B`·`케어푸드`가 후보로 올라와 "맥락 서술어는 출처가 주장한 내용이 아니다"라며
+# 걸러냈다. **코드에서는 고쳤는데 루브릭에는 반영하지 않았다** —
+# "사양이 실행 경로에 없다"의 다섯 번째다.
+#
+# ## 규칙 1보다 앞에 놓는 이유
+#
+# 지금 기계가 이 서술을 **규칙 1로** 처리하고 있다. 예외를 규칙 1보다 뒤에 두면
+# 이미 적용된 규칙을 되돌려야 하는데, Router 결함 J에서 그 방식이 실패했다
+# (규칙 안에 예외를 삽입해도 90.0%에서 멈췄다). 그래서 별도 규칙으로 앞에 세운다.
+#
+# ## 위험 — 지역 조작은 여전히 잡아야 한다
+#
+# "주입된 맥락"과 "fact가 주장하는 지역"의 경계가 애매하다. 원문이 유럽 얘기인데
+# fact가 "북미 시장에서"라고 쓴 경우는 **잡아야 한다.** 그래서 문구에 그 구분을
+# 명시했다. 다만 지역 판정의 주 담당은 관련성 축(결함 G 수정으로 `region` 필드 신설)
+# 이므로, 근거지지도가 지역을 이중으로 벌하고 있었을 가능성이 있다 —
+# 결함 A("두 축을 한 판단에 섞음")의 잔재다.
+RULE0_TEXT = """■ 규칙 0 (규칙 1보다 먼저 적용) — 주입된 맥락은 감점하지 않는다
+fact 문장에는 이 조사의 연구대상·목표시장 서술이 함께 들어 있습니다
+(예: "한국 시니어 케어푸드 시장에서", "유럽 B2B 유통 시장에서", "북미 시니어 건강관리
+시장에서"). 이것은 **질문 쪽에서 주어진 맥락**이며 출처가 주장한 내용이 아닙니다.
+따라서 **원문에 없어도 감점 사유가 아니고, 규칙 1의 "지어낸 고유명사"에 해당하지
+않습니다.**
+
+원문에 있어야 하는 것은 fact가 **주장하는 내용** — 금액·비율·성장률·개수, 연도·날짜,
+기업·기관·제품의 고유명사 — 입니다.
+
+단, 다음은 규칙 0의 예외이며 규칙 1을 그대로 적용합니다.
+- 원문이 다른 지역을 말하는데 fact가 목표시장 지역에서 일어난 일처럼 서술한 경우
+  (원문 "유럽에서 35%" → fact "북미에서 35%")
+- 목표시장 서술 안에 원문에 없는 **수치**가 붙은 경우
+  (원문에 연도가 없는데 fact가 "2026년 북미 시장에서"라고 쓴 경우의 그 연도)
+
+"""
+
+
+def rubric_with_rule0(prompt: str) -> str:
+    """규칙 0을 규칙 1 앞에 삽입한다."""
+    i = prompt.find(ANCHOR_R1)
+    if i < 0:
+        raise SystemExit("규칙 1을 못 찾았다 — 프롬프트가 바뀌었는지 확인할 것")
+    if "규칙 0" in prompt:
+        raise SystemExit("이미 규칙 0이 있다")
+    return prompt[:i] + RULE0_TEXT + prompt[i:]
+
+
+def rubric_without_rule0(prompt: str) -> str:
+    """규칙 0을 제거한다 (운영에 반영된 뒤 기준선을 만들 때 쓴다)."""
+    i = prompt.find("■ 규칙 0")
+    if i < 0:
+        raise SystemExit("규칙 0이 없다")
+    j = prompt.find(ANCHOR_R1, i)
+    return prompt[:i] + prompt[j:]
+
+
+def apply_rule0(want: bool):
+    """조건이 요구하는 상태로 맞추는 패치 함수를 준다 (운영 상태와 무관하게 절대 지정).
+
+    결함 L·M 때 조건을 운영 상태에 상대적으로 정의해 테스트 8개가 깨졌다.
+    이번에는 처음부터 "있어야 한다 / 없어야 한다"로 정의한다.
+    """
+    def patch(prompt: str) -> str:
+        has = "■ 규칙 0" in prompt
+        if want and not has:
+            return rubric_with_rule0(prompt)
+        if not want and has:
+            return rubric_without_rule0(prompt)
+        return prompt
+    return patch
+
+
+# (설명, reasoning 먼저인가, 4점 정의가 있는가, 규칙 0이 있는가)
+#
+# D 가 현 운영 상태다(결함 L·M 수정 후, 규칙 0 전). E·F 가 규칙 0을 시험한다.
+# 조건은 **운영 상태와 무관하게 절대적으로** 구성한다 — 결함 L·M 때 상대적으로
+# 정의해 운영을 고치자 기준선을 만들 수 없게 됐다.
 CONDITIONS = {
-    "A": ("수정 전 — score 먼저 · 4점 없음", False, False),
-    "B": ("순서만 — reasoning 먼저 · 4점 없음", True, False),
-    "C": ("루브릭만 — score 먼저 · 4점 있음", False, True),
-    "D": ("현 운영 — reasoning 먼저 · 4점 있음", True, True),
+    "A": ("수정 전 — score · 4점 없음 · 규칙0 없음", False, False, False),
+    "B": ("순서만 — reasoning · 4점 없음 · 규칙0 없음", True, False, False),
+    "C": ("루브릭만 — score · 4점 있음 · 규칙0 없음", False, True, False),
+    "D": ("현 운영 — reasoning · 4점 있음 · 규칙0 없음", True, True, False),
+    "E": ("규칙0 추가 — reasoning · 4점 있음 · 규칙0 있음", True, True, True),
+    "F": ("규칙0만 — score · 4점 있음 · 규칙0 있음", False, True, True),
 }
+
+# 기본 실행 조건 — D vs E 두 개면 규칙 0의 효과를 잰다(50건 × 2 × 3회 = 300호출).
+# 여섯 조건을 다 돌리면 900호출이라, 필요할 때만 --conditions 로 지정한다.
+DEFAULT_CONDITIONS = "D,E"
 
 
 # ── 실행 ───────────────────────────────────────────────────────────────────
@@ -284,31 +389,39 @@ def grade_with(client, schema: dict, prompt_patch, item: dict, market: str):
 def wiring_check() -> None:
     """교체가 실제로 반영되는지 확인한다. 여기서 실패하면 실험 결과가 무의미하다."""
     print("배선 확인")
-    ok = 0
+    # 검사 개수를 공식으로 세다가 틀렸다(고정 검사가 5개인데 4로 셌다). 조건을 추가할
+    # 때마다 공식을 고쳐야 하는 구조 자체가 문제이므로 **실제로 센다.**
+    ok = total = 0
     def chk(c, m):
-        nonlocal ok
+        nonlocal ok, total
+        total += 1
         print(f"  {'OK ' if c else '★  '} {m}")
         ok += bool(c)
 
     item = {"text": "시장은 2조 원 규모다", "source_excerpt": "시장은 2조 원 규모다",
             "topic": "테스트", "region": "한국"}
-    for name, (_, reorder, add4) in CONDITIONS.items():
+    for name, (_, reorder, add4, add_r0) in CONDITIONS.items():
         cl = RecordingClient()
         sch = schema_reasoning_first() if reorder else schema_score_first()
-        grade_with(cl, sch, None if add4 else rubric_without_4, item, "테스트 시장")
+        r0 = apply_rule0(add_r0)
+        grade_with(cl, sch, r0 if add4 else (lambda p: r0(rubric_without_4(p))), item, "테스트 시장")
         seen = cl.seen[-1]
         props = list(seen["response_format"]["json_schema"]["schema"]["properties"])
         req = seen["response_format"]["json_schema"]["schema"]["required"]
         want = ["reasoning", "score"] if reorder else ["score", "reasoning"]
         chk(props == want, f"{name}: properties 순서 {props}")
         chk(req == want, f"{name}: required 순서 {req}")
-        has4 = "4점:" in seen["prompt"]
-        chk(has4 == add4, f"{name}: 프롬프트의 4점 정의 {'있음' if has4 else '없음'}")
+        has4 = "- 4점:" in seen["prompt"]
+        chk(has4 == add4, f"{name}: 4점 정의 {'있음' if has4 else '없음'}")
+        hr0 = "■ 규칙 0" in seen["prompt"]
+        chk(hr0 == add_r0, f"{name}: 규칙 0 {'있음' if hr0 else '없음'}")
 
     chk(list(V.GRADE_SCHEMA["json_schema"]["schema"]["properties"]) == ["reasoning", "score"],
         "호출 후 운영 스키마가 원상 복구됨 (reasoning 먼저)")
-    chk("4점:" in V.PERSPECTIVE_PROMPTS["groundedness"],
+    chk("- 4점:" in V.PERSPECTIVE_PROMPTS["groundedness"],
         "호출 후 운영 프롬프트가 원상 복구됨 (4점 정의 있음)")
+    chk(("■ 규칙 0" in V.PERSPECTIVE_PROMPTS["groundedness"]) == RULE0_IN_PRODUCTION,
+        f"호출 후 규칙 0 상태 유지 ({'있음' if RULE0_IN_PRODUCTION else '없음'})")
 
     # ── 여기까지는 "스키마가 전달되는가"만 본다 ──────────────────────────
     #
@@ -334,8 +447,8 @@ def wiring_check() -> None:
     chk(score9 == V.SCORE_MAX,
         f"범위 밖 점수 9 → {score9} 로 보정 (clamp_score 를 거쳤다)")
 
-    print(f"\n  {ok}/16 통과")
-    if ok != 16:
+    print(f"\n  {ok}/{total} 통과")
+    if ok != total:
         raise SystemExit("배선 확인 실패 — 실험을 진행하면 안 된다")
 
 
@@ -379,9 +492,10 @@ def run(conditions: list[str], repeat: int, limit: Optional[int], model: Optiona
 
     res: dict = {c: {} for c in conditions}
     for c in conditions:
-        _, reorder, add4 = CONDITIONS[c]
+        _, reorder, add4, add_r0 = CONDITIONS[c]
         sch = schema_reasoning_first() if reorder else schema_score_first()
-        patch = None if add4 else rubric_without_4
+        r0 = apply_rule0(add_r0)
+        patch = r0 if add4 else (lambda p: r0(rubric_without_4(p)))
         print(f"[{c}] {CONDITIONS[c][0]}")
         for k, it in enumerate(targets, 1):
             runs = []
@@ -506,7 +620,7 @@ def report(res: dict, meta: dict) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--conditions", default="A,B,C,D")
+    ap.add_argument("--conditions", default=DEFAULT_CONDITIONS)
     ap.add_argument("--repeat", type=int, default=2)
     ap.add_argument("--limit", type=int)
     ap.add_argument("--model")
