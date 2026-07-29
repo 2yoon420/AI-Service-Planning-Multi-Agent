@@ -449,13 +449,70 @@ def _add_cover(
 # ---------------------------------------------------------------------------
 # 3. 01 개요 — TAM·SAM·SOM 카드
 # ---------------------------------------------------------------------------
+# TAM 근거 문자열에서 기준 연도를 뽑는 패턴.
+# market_research가 만드는 assumptions[0]의 형식에 맞춘다.
+#   "(2021 기준, 근거: ...)"          → ('2021', None)
+#   "(2025 (예측치) 기준, 근거: ...)"  → ('2025', '예측치')
+_TAM_YEAR_PAT = re.compile(r"\((\d{4})(?:\s*\(([^)]*)\))?\s*기준,\s*근거")
+
+
+def tam_basis_caption(market_sizing: Optional[MarketSizing]) -> str:
+    """개요 카드의 TAM 설명 문구를 만든다 (2026-07-29 결함 I 수정).
+
+    ## 무엇이 문제였는가
+
+    이 문구가 `"2022년 시장 규모 기준 (Top-down)"` 으로 **하드코딩**돼 있었다.
+    실제 근거 연도와 무관하게 세 문서 전부 2022년이라고 적혔다.
+
+        한국 HMR    개요 2022년  ↔  근거 2021년
+        유럽 포장재  개요 2022년  ↔  근거 2025년(예측치)
+        북미 웨어러블 개요 2022년  ↔  근거 2021년
+
+    **세 건 모두 틀렸다.** 눈에 잘 띄지 않는 종류다 — TAM 값 자체는 맞고 **연도만**
+    틀렸으며, 개요와 02장이 서로 다른 페이지에 있어 나란히 놓고 보지 않으면 모른다.
+
+    성격이 결함 E(통화 미구분)와 같다. 값은 그럴듯한데 단위·기준이 틀렸다.
+    「Relevant Is Not Warranted」의 5축 중 **temporal validity**(시점 부정합)에 해당한다.
+
+    **검증기가 못 잡은 이유**: 검증기는 fact를 채점하지 기획서를 채점하지 않는다.
+    이 문자열은 fact가 아니라 문서 템플릿에 박힌 것이라 어떤 검증 계층도 지나지 않았다.
+    3차 외부 검토가 *"부품은 넷으로 쟀는데 완성품은 한 번도 안 쟀다"* 고 한 것의 실물
+    사례이며, 산출물 루브릭(`eval/rubric/hisrubric.py` 항목 10)이 발견했다.
+
+    ## 어떻게 고쳤는가
+
+    `MarketSizing`에 연도 필드가 없으므로 `assumptions[0]`에서 뽑는다. **뽑지 못하면
+    연도를 적지 않는다** — 틀린 연도를 쓰느니 안 쓰는 편이 낫다. 이 프로젝트의
+    *"찾지 못한 정보는 지어내지 않는다"* 원칙을 그대로 적용한 것이다.
+
+    ## 한계
+
+    문자열 파싱이라 `market_research`가 근거 형식을 바꾸면 조용히 실패한다. 다만
+    실패해도 **틀린 값이 아니라 빈 값**이 되므로 안전한 방향이다. 근본 해결은
+    `MarketSizing`에 `tam_year` 필드를 두는 것이며, 스키마 변경이라 이번에는 하지 않았다.
+    """
+    if market_sizing is None:
+        return "Top-down 기준"
+    for a in market_sizing.assumptions or []:
+        if "Top-down" not in a or "TAM" not in a:
+            continue
+        m = _TAM_YEAR_PAT.search(a)
+        if m:
+            year, note = m.group(1), (m.group(2) or "").strip()
+            kind = f"{year}년 {note}" if note else f"{year}년 시장 규모"
+            return f"{kind} 기준 (Top-down)"
+    # 연도를 확인할 수 없으면 적지 않는다. 02장에 근거가 있으므로 그리로 보낸다.
+    return "Top-down 기준 (기준 연도는 02장 참고)"
+
+
 def _add_kpi_cards(doc: Document, market_sizing: Optional[MarketSizing]) -> None:
     if market_sizing is None:
         _add_body_paragraph(doc, "시장조사 에이전트 실행 이력이 없어 시장 규모 데이터가 없습니다.")
         return
 
     cards = [
-        ("TAM", _fmt_compact(market_sizing.tam_topdown, dollar_prefix=True), "2022년 시장 규모 기준 (Top-down)"),
+        ("TAM", _fmt_compact(market_sizing.tam_topdown, dollar_prefix=True),
+         tam_basis_caption(market_sizing)),
         ("SAM", _fmt_compact(market_sizing.sam_topdown, dollar_prefix=True), "TAM 중 유효 시장 세그먼트"),
         ("SOM", _fmt_compact(market_sizing.som_topdown, dollar_prefix=True), "초기 확보 가능 목표 (SAM 대비 비중)"),
     ]

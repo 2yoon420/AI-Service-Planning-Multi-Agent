@@ -802,7 +802,8 @@ def _use_english_price_query(target_market: str) -> bool:
     return any(kw.lower() in market_lower for kw in _ENGLISH_REVIEW_MARKET_KEYWORDS)
 
 
-def _deep_dive_queries(name: str, target_market: str = "") -> list[str]:
+def _deep_dive_queries(name: str, target_market: str = "",
+                       current_year: Optional[int] = None) -> list[str]:
     """경쟁사 이름이 이미 확정된 상태이므로, 시장조사 단계(generate_competitor_queries)처럼
     LLM으로 질문을 새로 만들 필요 없이 고정 템플릿으로 가격·투자매출·판매채널을 겨냥한
     질의를 만든다 — 회사명이 정해진 뒤의 질문 생성에 LLM 호출을 쓰는 건 낭비라고 판단.
@@ -819,11 +820,25 @@ def _deep_dive_queries(name: str, target_market: str = "") -> list[str]:
     2026-07-23 변경: 가격 질의 언어를 target_market에 따라 동적으로 결정하도록 함(파이프라인
     문서 31절) — 기존엔 목표시장이 항상 북미라는 전제로 영어를 하드코딩했으나, 다른 목표시장
     (예: 한국 국내)에는 영어 리뷰 기사 타겟팅이 안 맞을 수 있어 `_use_english_price_query()`로
-    분기한다."""
+    분기한다.
+
+    ## 2026-07-29 변경: 질의의 연도를 실행 시각에서 가져온다
+
+    이전에는 `f"{name} price review comparison 2026"` 처럼 **연도가 문자열에 박혀
+    있었다.** 2027년에 실행하면 한 해 지난 리뷰 기사를 겨냥한다. 조용히 낡아가고,
+    검색 결과가 나빠져도 원인이 코드에 있다는 것을 알기 어렵다.
+
+    **결함 I(기획서 개요의 `"2022년 시장 규모 기준"` 하드코딩)와 같은 유형이다.**
+    결함 I는 문서 출력 쪽이었고 이쪽은 검색 입력 쪽이라, 파이프라인에서 더 이르다 —
+    입력이 낡으면 그 뒤 모든 단계가 낡은 자료를 받는다.
+
+    `current_year`를 인자로 받는 이유: 테스트에서 연도를 고정해야 검증이 재현된다.
+    기본값 `None`이면 실행 시각의 연도를 쓴다."""
+    year = current_year if current_year is not None else date.today().year
     if _use_english_price_query(target_market):
-        price_query = f"{name} price review comparison 2026"
+        price_query = f"{name} price review comparison {year}"
     else:
-        price_query = f"{name} 가격 비교 리뷰 추천 2026"
+        price_query = f"{name} 가격 비교 리뷰 추천 {year}"
     return [
         price_query,
         f"{name} 투자 유치 매출 실적 규모",
