@@ -1,0 +1,598 @@
+{
+  "created_at": "2026-07-29T05:38:40+00:00",
+  "model": "solar-pro2",
+  "repeat": 5,
+  "note": "Router 6-way 분류 골든셋. 정답 근거는 eval/cases_router.py 참고.",
+  "results": {
+    "C-AP-1": [
+      "approve",
+      "approve",
+      "approve",
+      "approve",
+      "approve"
+    ],
+    "C-AP-2": [
+      "approve",
+      "approve",
+      "approve",
+      "approve",
+      "approve"
+    ],
+    "C-AP-3": [
+      "approve",
+      "approve",
+      "approve",
+      "approve",
+      "approve"
+    ],
+    "C-AP-4": [
+      "approve",
+      "approve",
+      "approve",
+      "approve",
+      "approve"
+    ],
+    "C-MR-1": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "C-MR-2": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "C-MR-3": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "C-MR-4": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "C-PE-1": [
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel"
+    ],
+    "C-PE-2": [
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel"
+    ],
+    "C-PE-3": [
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel"
+    ],
+    "C-PE-4": [
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel"
+    ],
+    "C-CO-1": [
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor"
+    ],
+    "C-CO-2": [
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor"
+    ],
+    "C-CO-3": [
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor"
+    ],
+    "C-CO-4": [
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor"
+    ],
+    "C-CQ-1": [
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question"
+    ],
+    "C-CQ-2": [
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question"
+    ],
+    "C-CQ-3": [
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question"
+    ],
+    "C-CQ-4": [
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question"
+    ],
+    "C-UN-1": [
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear"
+    ],
+    "C-UN-2": [
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear"
+    ],
+    "C-UN-3": [
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear"
+    ],
+    "C-UN-4": [
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear"
+    ],
+    "C-UN-5": [
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear"
+    ],
+    "C-UN-6": [
+      "approve",
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear"
+    ],
+    "B-A-1": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "B-A-2": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "B-A-3": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "B-A-4": [
+      "revise_pestel",
+      "revise_pestel",
+      "approve",
+      "revise_pestel",
+      "revise_pestel"
+    ],
+    "B-A-5": [
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel",
+      "revise_pestel"
+    ],
+    "B-A-6": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "B-X-1": [
+      "revise_competitor",
+      "revise_market_research",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor"
+    ],
+    "B-X-2": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "B-X-3": [
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor"
+    ],
+    "B-X-4": [
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question"
+    ],
+    "B-X-5": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_competitor",
+      "revise_market_research"
+    ],
+    "B-X-6": [
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "capability_question",
+      "approve"
+    ],
+    "L-C-1": [
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor",
+      "revise_competitor"
+    ],
+    "L-C-2": [
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research",
+      "revise_market_research"
+    ],
+    "L-C-3": [
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear",
+      "unclear"
+    ],
+    "L-C-4": [
+      "approve",
+      "approve",
+      "approve",
+      "approve",
+      "approve"
+    ]
+  },
+  "needs_new_search": {
+    "C-AP-1": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-AP-2": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-AP-3": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-AP-4": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-MR-1": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-MR-2": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-MR-3": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-MR-4": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-PE-1": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-PE-2": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-PE-3": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-PE-4": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-CO-1": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-CO-2": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-CO-3": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-CO-4": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "C-CQ-1": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-CQ-2": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-CQ-3": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-CQ-4": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-UN-1": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-UN-2": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-UN-3": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-UN-4": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-UN-5": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "C-UN-6": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "B-A-1": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-A-2": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-A-3": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-A-4": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "B-A-5": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "B-A-6": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-X-1": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-X-2": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-X-3": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-X-4": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "B-X-5": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "B-X-6": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "L-C-1": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "L-C-2": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "L-C-3": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "L-C-4": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  }
+}
