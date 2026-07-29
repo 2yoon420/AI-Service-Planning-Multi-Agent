@@ -54,3 +54,6 @@ fact_store/kr_snapshot.db
 orchestrator/checkpoints.db-wal
 orchestrator/checkpoints.db-shm
 eval/__pycache__/
+
+# 서버 DB 스냅샷 (2026-07-29)
+fact_store/fact_*.db
