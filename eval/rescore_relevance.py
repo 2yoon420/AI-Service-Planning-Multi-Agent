@@ -86,7 +86,30 @@ DATASET_REGION = {
     "북미_반려동물": "북미",
 }
 
-OUT_PATH = Path("eval/label/rescored_relevance.json")
+OUT_DIR = Path("eval/label")
+OUT_PATH = OUT_DIR / "rescored_relevance.json"      # 최신 결과 (--reuse 대상)
+
+
+def archive_path(model: str) -> Path:
+    """실행마다 별도 파일로도 남긴다.
+
+    ## 왜 뒤늦게 붙였는가
+
+    이 스크립트는 고정 경로 하나에만 저장했다. 그래서 **결함 L 수정 후 재실행이
+    수정 전 실행(κ=0.551)의 원본을 덮었다.** 문서에 수치를 적어둔 덕에 비교는 됐지만
+    점수별 이동을 다시 볼 수는 없다.
+
+    **같은 유형을 네 번째로 만났다** — `relevance_guard.py`(오전), `router_goldenset.py`
+    (오후), `schema_order.py`(처음부터 보관)에 이어 여기까지. 신규 스크립트에 보관을
+    넣으면서 **기존 스크립트를 훑어보지 않은 것**이 원인이다. 한 곳을 고칠 때 같은
+    패턴이 다른 곳에 있는지 확인하는 절차가 없다.
+
+    측정값에는 **어느 코드로 쟀는지**가 함께 남아야 한다. 루브릭이 바뀌면 같은
+    스크립트가 다른 값을 내놓기 때문이다.
+    """
+    from datetime import datetime, timezone
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return OUT_DIR / f"rescored_relevance_{stamp}_{model}.json"
 
 
 # 문장에서 찾은 지역어 → 정규화된 지역. 변형 B에서만 쓴다.
@@ -320,14 +343,19 @@ def main() -> int:
         for v in variants:
             rescored[v] = rescore(rows, v, args.model, args.sleep)
         OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        OUT_PATH.write_text(json.dumps({
+        _payload = json.dumps({
             "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "model": args.model,
             "axis": "relevance",
             "note": "관련성 축만 재채점. 근거지지도는 원문 미저장으로 불가.",
             "scores": rescored,
-        }, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"\n저장: {OUT_PATH}")
+        }, ensure_ascii=False, indent=2)
+        OUT_PATH.write_text(_payload, encoding="utf-8")
+        _arch = archive_path(args.model)
+        _arch.write_text(_payload, encoding="utf-8")
+        print(f"저장: {OUT_PATH}")
+        print(f"보관: {_arch}   ← 루브릭이 바뀌면 같은 스크립트가 다른 값을 낸다")
+
 
     report(rows, rescored)
     return 0
